@@ -45,7 +45,7 @@ class WormholeBot(commands.Bot):
                 continue
             elif guild.id in config["servers"]:
                 for channel in guild.text_channels:
-                    if channel.id in config["channels"] and channel.id not in config["banned_servers"]:
+                    if channel.id in config["channels"] and channel.id != message.channel.id:
                         await channel.send(f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}")
 
     async def get_config(self):
@@ -143,17 +143,17 @@ async def connect_command(ctx):
         config["servers"].append(ctx.guild.id)
         if await write_config(config):
             logging.info(f"Connected to {ctx.guild.name}")
-            await ctx.send("Connected to the public server.")
+            await ctx.send("Connected server")
         else:
             logging.error(f"Error connecting to {ctx.guild.name}")
-            await ctx.send("Error connecting to the public server. Please contact @JushBJJ")
+            await ctx.send("Error connecting your server. Please contact @JushBJJ")
     else:
         await ctx.send("You must be a server admin to use this command.")
     
 @bot.command(name="disconnect")
 async def disconnect_command(ctx):
     """
-    %disconnect: Disconnect from the public server
+    %disconnect: Disconnect your server
     """
     
     if bot.user_is_admin(ctx):
@@ -167,10 +167,10 @@ async def disconnect_command(ctx):
         
         if await write_config(config):
             logging.info(f"Disconnected from {ctx.guild.name}")
-            await ctx.send("Disconnected from the public server.")
+            await ctx.send("Disconnected your server.")
         else:
             logging.error(f"Error disconnecting from {ctx.guild.name}")
-            await ctx.send("Error disconnecting from the public server. Please contact @JushBJJ")
+            await ctx.send("Error disconnecting your server. Please contact @JushBJJ")
     else:
         await ctx.send("You must be a server admin to use this command.")
 
@@ -193,7 +193,7 @@ async def website_command(ctx):
 @bot.command(name="join")
 async def join_command(ctx):
     """
-    %join: Join the public server. Automatically connects the server to the public server if not already connected.
+    %join: Join the server. Automatically connects the server to the server if not already connected.
     """
     
     if ctx.guild.id not in await bot.get_servers():
@@ -208,7 +208,7 @@ async def join_command(ctx):
     
     config["channels"].append(channel_id)
     if await write_config(config):
-        await ctx.send("Connected to the public server.")
+        await ctx.send("Connected channel")
     else:
         await ctx.send("Error connecting channel. Please contact @JushBJJ")
         
@@ -216,7 +216,7 @@ async def join_command(ctx):
 @bot.command(name="leave")
 async def leave_command(ctx):
     """
-    %leave: Leave the public server. Does NOT disconnect the server from the public server.
+    %leave: Stops recieving messages channel. Does NOT disconnect your server.
     """
     
     config = await bot.get_config()
@@ -229,7 +229,7 @@ async def leave_command(ctx):
         return
     
     if await write_config(config):
-        await ctx.send("Disconnected from the public server.")
+        await ctx.send("Disconnected channel.")
     else:
         await ctx.send("Error disconnecting channel. Please contact @JushBJJ")
         
