@@ -17,11 +17,11 @@ intents = discord.Intents.all()
 
 
 class WormholeBot(commands.Bot):
-    def __init__(self, command_prefix, intents):
+    def __init__(self, command_prefix, intents, debug=False):
         super().__init__(command_prefix, intents=intents)
-        self.client_id = os.getenv("client_id", "")
-        self.client_secret = os.getenv("client_secret", "")
-        self.token = os.getenv("token", "")
+        self.client_id = os.getenv("client_id", "") if not debug else os.getenv("DEV_client_id", "")
+        self.client_secret = os.getenv("client_secret", "") if not debug else os.getenv("DEV_client_secret", "")
+        self.token = os.getenv("token", "") if not debug else os.getenv("DEV_token", "")
         self.remove_command("help")
         
         self.bot_commands = []
@@ -124,15 +124,20 @@ class WormholeBot(commands.Bot):
         config = await read_config()
         return config.get("admins", [])
     
-    async def get_allowed_channels(self):
+    async def get_allowed_channels(self, as_list=True):
         config = await read_config()
+        
+        if as_list:
+            return list(config.get("channels", []))
         return config.get("channels", [])
 
     def is_itself(self, message):
         return message.author.id == self.user.id
     
-    def user_is_admin(self, ctx):
-        return ctx.author.guild_permissions.VALID_FLAGS.get("administrator", False)
+    async def user_is_admin(self, ctx):
+        is_manually_admin = ctx.author.id in await self.get_admins()
+        is_admin = ctx.author.guild_permissions.administrator
+        return is_admin or is_manually_admin
 
 
 bot = WormholeBot(command_prefix="%", intents=intents)
@@ -175,6 +180,10 @@ async def on_message(message):
                 
         bot.logger.info(msg)
         await bot.global_msg(message, msg)
+        
+        channel_config = await bot.get_allowed_channels(as_list=False)
+        #if 
+        #    await message.add_reaction("✅")
         await message.add_reaction("✅") # TOOD make this optional
 
 
@@ -196,7 +205,7 @@ async def stats_command(ctx):
     """
     %stats: Display the bot's stats
     """
-    n_servers =-len(await bot.get_servers())
+    n_servers = len(await bot.get_servers())
     n_users = sum([guild.member_count for guild in ctx.bot.guilds])
     
     await ctx.send(f"Connected to {n_servers} servers.\nTotal {n_users} users.")
@@ -207,7 +216,7 @@ async def connect_command(ctx):
     %connect: Connect your server to the public. Do `%join` in the channel you want to connect. By default, all channels are not connected.
     """
     
-    if bot.user_is_admin(ctx):
+    if await bot.user_is_admin(ctx):
         config = await bot.get_config()
         
         # Check if the server is already connected
@@ -231,7 +240,7 @@ async def disconnect_command(ctx):
     %disconnect: Disconnect your server
     """
     
-    if bot.user_is_admin(ctx):
+    if await bot.user_is_admin(ctx):
         config = await bot.get_config()
         
         try:
