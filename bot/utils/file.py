@@ -1,9 +1,18 @@
 import aiofiles
 import logging
 import json
+import os
+
+config_file = "./default_config.json"
+
+if os.path.exists("./config.json"):
+    config_file = "./config.json"
 
 async def read_config() -> dict:
-    async with aiofiles.open(f"./config.json", mode="r") as file:
+    # Decide whether to use the default config or the user's config
+    filename = "./default_config.json"
+    
+    async with aiofiles.open(config_file, mode="r") as file:
         try:
             return json.loads(await file.read())
         except json.JSONDecodeError as e:
@@ -18,7 +27,7 @@ async def read_config() -> dict:
     return dict({})
 
 async def write_config(data: dict) -> bool:
-    async with aiofiles.open(f"./config.json", mode="w") as file:
+    async with aiofiles.open(config_file, mode="w") as file:
         try:
             await file.write(json.dumps(data, indent=4))
             return True

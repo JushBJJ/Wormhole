@@ -1,0 +1,20 @@
+{
+    "admins": [
+        706702251812716595,
+        1190028762998378627
+    ],
+    "servers": [
+
+    ],
+    "channels": {
+       
+    },
+    "banned_servers": [],
+    "banned_users": [],
+    "banned_words": [
+        "@here",
+        "\\@here",
+        "@everyone",
+        "\\@everyone"
+    ]
+}

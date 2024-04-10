@@ -125,6 +125,7 @@ class WormholeBot(commands.Bot):
             elif guild.id in config["servers"]:
                 for channel in guild.text_channels:
                     if str(channel.id) in config["channels"] and channel.id != message.channel.id:
+                        bot.logger.info(msg)
                         filtered_msg = await self.filter_message(msg)
                         await channel.send(filtered_msg)
     
@@ -208,8 +209,7 @@ async def on_message(message):
                 msg += f"\n{attachment.url}" or ""
         
         # TODO embed support
-                
-        bot.logger.info(msg)
+            
         await bot.global_msg(message, msg)
         
         channel_config = await bot.get_allowed_channels(as_list=False)
@@ -316,15 +316,16 @@ async def join_command(ctx):
         await ctx.invoke(connect_command)
     
     config = await bot.get_config()
-    channel_id = ctx.channel.id
+    channel_id = str(ctx.channel.id)
     
-    if channel_id in config["channels"]:
+    if channel_id in list(config["channels"]):
         await ctx.send("This channel is already connected.")
         return
     
     config["channels"][channel_id] = {}
     
-        
+    for key, value in bot.default_channel_config_options.items():
+        config["channels"][channel_id][key] = value
     
     if await write_config(config):
         await ctx.send("Connected channel")
@@ -339,10 +340,10 @@ async def leave_command(ctx):
     """
     
     config = await bot.get_config()
-    channel_id = ctx.channel.id
+    channel_id = str(ctx.channel.id)
     
     try:
-        config["channels"].remove(channel_id)
+        config["channels"].pop(channel_id)
     except ValueError:
         await ctx.send("This channel is not connected.")
         return
@@ -423,6 +424,21 @@ async def autoindex_old_channels_command(ctx):
 
     bot.logger.info("Auto-indexing complete.")
     await ctx.send("Auto-indexing complete.")
+    
+@bot.command(name="broadcast")
+async def broadcast_command(ctx):
+    """
+    %broadcast: Broadcast a message to all connected servers
+    """
+    
+    if ctx.author.id not in await bot.get_admins():
+        await ctx.send("You must be an admin to use this command.")
+        return
+    
+    content=ctx.message.content.removeprefix("%broadcast ")
+    msg=f"# BROADCAST by {ctx.author.display_name}\n{content}"
+    
+    await bot.global_msg(ctx.message, msg)
 
 @bot.command(name="config")
 async def config_command(ctx):
@@ -458,7 +474,7 @@ async def set_config_command(ctx, config_type: str, key: str, value: str):
         
         if value_type == bool:
             try:
-                value = bool(value)
+                value = True if value.lower() == "true" else False
             except ValueError:
                 await ctx.send("Value must be a boolean.")
                 return
@@ -483,7 +499,7 @@ async def set_config_command(ctx, config_type: str, key: str, value: str):
     
     config = await bot.get_config()
 
-    config[key] = value
+    config["channels"][str(ctx.channel.id)][key] = value
     await write_config(config)
     await ctx.send(f"Set {key} to {value}")
 
