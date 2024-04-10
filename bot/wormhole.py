@@ -1,10 +1,10 @@
 import discord
 import logging
-import asyncio
 import os
 
 from discord.ext import commands
 from bot.utils.file import read_config, write_config
+from colorlog import ColoredFormatter
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,10 +25,51 @@ class WormholeBot(commands.Bot):
         self.remove_command("help")
         
         self.bot_commands = []
+        self.logger = self.configure_logging()
 
     def start_wormhole(self):
-        logging.warning("Starting Wormhole...")
+        self.logger.warning("Starting Wormhole...")
         self.run(self.token)
+        
+    def configure_logging(self):
+        # Create a custom logger
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        # Create handlers
+        c_handler = logging.StreamHandler()
+        f_handler = logging.FileHandler('wormhole.log')
+        c_handler.setLevel(logging.INFO)
+        f_handler.setLevel(logging.INFO)
+        
+        # Create formatters and add it to handlers
+        # Using colorlog for console handler
+        c_format = ColoredFormatter(
+            '%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s%(reset)s',
+            datefmt=None,
+            reset=True,
+            log_colors={
+                'DEBUG': 'cyan',
+                'INFO': 'green',
+                'WARNING': 'yellow',
+                'ERROR': 'red',
+                'CRITICAL': 'red,bg_white',
+            },
+            secondary_log_colors={},
+            style='%'
+        )
+        # Standard formatter for file handler
+        f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        c_handler.setFormatter(c_format)
+        f_handler.setFormatter(f_format)
+        
+        # Add handlers to the logger
+        logger.addHandler(c_handler)
+        logger.addHandler(f_handler)
+        
+        return logger
+    
 
     async def on_ready(self):
         await self.index_commands()
@@ -128,7 +169,7 @@ async def on_message(message):
             for attachment in message.attachments:
                 msg += f"\n{attachment.url}" or ""
                 
-        logging.info(msg)
+        bot.logger.info(msg)
         await bot.global_msg(message, msg)
         await message.add_reaction("✅") # TOOD make this optional
 
@@ -172,10 +213,10 @@ async def connect_command(ctx):
         
         config["servers"].append(ctx.guild.id)
         if await write_config(config):
-            logging.info(f"Connected to {ctx.guild.name}")
+            bot.logger.info(f"Connected to {ctx.guild.name}")
             await ctx.send("Connected server")
         else:
-            logging.error(f"Error connecting to {ctx.guild.name}")
+            bot.logger.error(f"Error connecting to {ctx.guild.name}")
             await ctx.send("Error connecting your server. Please contact @JushBJJ")
     else:
         await ctx.send("You must be a server admin to use this command.")
@@ -196,10 +237,10 @@ async def disconnect_command(ctx):
             return
         
         if await write_config(config):
-            logging.info(f"Disconnected from {ctx.guild.name}")
+            bot.logger.info(f"Disconnected from {ctx.guild.name}")
             await ctx.send("Disconnected your server.")
         else:
-            logging.error(f"Error disconnecting from {ctx.guild.name}")
+            bot.logger.error(f"Error disconnecting from {ctx.guild.name}")
             await ctx.send("Error disconnecting your server. Please contact @JushBJJ")
     else:
         await ctx.send("You must be a server admin to use this command.")
@@ -302,17 +343,17 @@ async def autoindex_old_channels_command(ctx):
         return
     
     for guild in bot.guilds:
-        logging.info(f"Auto-indexing {guild.name}")
+        bot.logger.info(f"Auto-indexing {guild.name}")
         for channel in guild.text_channels:
             topic = channel.topic or ""
-            logging.info(f"Topic: {topic}")
+            bot.logger.info(f"Topic: {topic}")
             
             if "channel:1" in topic.lower():
                 config = await bot.get_config()
                 
                 # Check first if channel and server is already connected
                 if channel.id in config["channels"] and guild.id in config["servers"]:
-                    logging.info(f"{channel.name} in {guild.name} is already connected.")
+                    bot.logger.info(f"{channel.name} in {guild.name} is already connected.")
                     await ctx.send(f"{channel.name} in {guild.name} is already connected.")
                     continue
                 
@@ -323,17 +364,17 @@ async def autoindex_old_channels_command(ctx):
                     msg = f"Auto-connected {channel.name} in {guild.name}"
                     await write_config(config)
                     
-                    logging.info(msg)
+                    bot.logger.info(msg)
                     await ctx.send(msg)
                     
                     # Broadcast to new channel
                     channel_class = bot.get_channel(channel.id)
                     await channel_class.send("You now have been migrated to the new Wormhole system.\nGithub: https://github.com/JushBJJ/Wormhole-DIscord-Bot")
                 except Exception as e:
-                    logging.error(e)
+                    bot.logger.error(e)
                     await ctx.send(f"Error auto-connecting channels: {e}")
 
-    logging.info("Auto-indexing complete.")
+    bot.logger.info("Auto-indexing complete.")
     await ctx.send("Auto-indexing complete.")
 
 if __name__ == "__main__":
