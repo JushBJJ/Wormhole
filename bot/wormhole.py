@@ -302,10 +302,20 @@ async def autoindex_old_channels_command(ctx):
         return
     
     for guild in bot.guilds:
+        logging.info(f"Auto-indexing {guild.name}")
         for channel in guild.text_channels:
             topic = channel.topic or ""
-            if "[CHANNEL: 1]" in topic:
+            logging.info(f"Topic: {topic}")
+            
+            if "channel:1" in topic.lower():
                 config = await bot.get_config()
+                
+                # Check first if channel and server is already connected
+                if channel.id in config["channels"] and guild.id in config["servers"]:
+                    logging.info(f"{channel.name} in {guild.name} is already connected.")
+                    await ctx.send(f"{channel.name} in {guild.name} is already connected.")
+                    continue
+                
                 config["channels"].append(channel.id)
                 config["servers"].append(guild.id)
                 
@@ -315,9 +325,15 @@ async def autoindex_old_channels_command(ctx):
                     
                     logging.info(msg)
                     await ctx.send(msg)
+                    
+                    # Broadcast to new channel
+                    channel_class = bot.get_channel(channel.id)
+                    await channel_class.send("You now have been migrated to the new Wormhole system.\nGithub: https://github.com/JushBJJ/Wormhole-DIscord-Bot")
                 except Exception as e:
                     logging.error(e)
                     await ctx.send(f"Error auto-connecting channels: {e}")
+
+    logging.info("Auto-indexing complete.")
     await ctx.send("Auto-indexing complete.")
 
 if __name__ == "__main__":
