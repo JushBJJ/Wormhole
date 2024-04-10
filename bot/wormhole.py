@@ -73,7 +73,7 @@ class WormholeBot(commands.Bot):
 
     async def on_ready(self):
         await self.index_commands()
-        print("Wormhole Loaded.")
+        logging.info(f"Logged in as {self.user}")
         
     async def index_commands(self):
         self.bot_commands = [command for command in self.commands]
