@@ -11,6 +11,7 @@ load_dotenv()
 
 ADMIN_ID = 0
 WEBSITE_URL = "https://wormhole.jushbjj.com"
+REPO = "https://github.com/JushBJJ/Wormhole-DIscord-Bot"
 
 intents = discord.Intents.all()
 
@@ -189,6 +190,7 @@ async def website_command(ctx):
     """
     
     await ctx.send(WEBSITE_URL)
+    await ctx.send(REPO)
     
 @bot.command(name="join")
 async def join_command(ctx):
