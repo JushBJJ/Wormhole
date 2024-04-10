@@ -115,7 +115,7 @@ class WormholeBot(commands.Bot):
 
         return msg
 
-    async def global_msg(self, message, msg):
+    async def global_msg(self, message, msg, embed=[]):
         config = await self.get_config()
         guilds = list(self.guilds)
         
@@ -123,11 +123,15 @@ class WormholeBot(commands.Bot):
             if guild.id in config["banned_servers"]:
                 continue
             elif guild.id in config["servers"]:
+                bot.logger.info(msg)
+                
+                if embed:
+                    bot.logger.info(f"Embed: {embed}")
+                    
                 for channel in guild.text_channels:
                     if str(channel.id) in config["channels"] and channel.id != message.channel.id:
-                        bot.logger.info(msg)
                         filtered_msg = await self.filter_message(msg)
-                        await channel.send(filtered_msg)
+                        await channel.send(filtered_msg, embed=embed)
     
     async def get_config(self):
         return await read_config()
@@ -203,14 +207,16 @@ async def on_message(message):
 
     if message.guild.id in await bot.get_servers() and str(message.channel.id) in allowed_channels:
         msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
+        embed = None
         
         if message.attachments:
             for attachment in message.attachments:
                 msg += f"\n{attachment.url}" or ""
         
-        # TODO embed support
+        if message.embeds:
+            embed = discord.Embed.from_dict(message.embeds[0].to_dict())
             
-        await bot.global_msg(message, msg)
+        await bot.global_msg(message, msg, embed=embed)
         
         channel_config = await bot.get_allowed_channels(as_list=False)
         
