@@ -291,13 +291,14 @@ async def ping_command(ctx):
     await ctx.send("Pong!")
 
 # Admin-only commands
-@bot.command(name="autoindex_old_channels")
+@bot.command(name="autoindex")
 async def autoindex_old_channels_command(ctx):
     """
-    %autoindex_old_channels: Automatically index all channels that has \"[CHANNEL: 1]\" in its topic for all guilds the bot is currently in.
+    %autoindex: Automatically index all channels that has \"[CHANNEL: 1]\" in its topic for all guilds the bot is currently in.
     """
 
     if ctx.author.id not in await bot.get_admins():
+        await ctx.send("You must be an admin to use this command.")
         return
     
     for guild in bot.guilds:
