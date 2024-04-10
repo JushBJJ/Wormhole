@@ -78,6 +78,10 @@ class WormholeBot(commands.Bot):
     async def get_servers(self):
         config = await read_config()
         return config.get("servers", [])
+    
+    async def get_admins(self):
+        config = await read_config()
+        return config.get("admins", [])
 
     def is_itself(self, message):
         return message.author.id == self.user.id
@@ -285,6 +289,35 @@ async def ping_command(ctx):
     """
     
     await ctx.send("Pong!")
+
+# Admin-only commands
+@bot.command(name="autoindex_old_channels")
+async def autoindex_old_channels_command(ctx):
+    """
+    %autoindex_old_channels: Automatically index all channels that has \"[CHANNEL: 1]\" in its topic for all guilds the bot is currently in.
+    """
+
+    if ctx.author.id not in await bot.get_admins():
+        return
+    
+    for guild in bot.guilds:
+        for channel in guild.text_channels:
+            topic = channel.topic or ""
+            if "[CHANNEL: 1]" in topic:
+                config = await bot.get_config()
+                config["channels"].append(channel.id)
+                config["servers"].append(guild.id)
+                
+                try:
+                    msg = f"Auto-connected {channel.name} in {guild.name}"
+                    await write_config(config)
+                    
+                    logging.info(msg)
+                    await ctx.send(msg)
+                except Exception as e:
+                    logging.error(e)
+                    await ctx.send(f"Error auto-connecting channels: {e}")
+    await ctx.send("Auto-indexing complete.")
 
 if __name__ == "__main__":
     bot.start_wormhole()
