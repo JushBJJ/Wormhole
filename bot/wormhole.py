@@ -73,7 +73,7 @@ class WormholeBot(commands.Bot):
 
     async def on_ready(self):
         await self.index_commands()
-        logging.info(f"Logged in as {self.user}")
+        print(f"Logged in as {self.user}")
         
     async def index_commands(self):
         self.bot_commands = [command for command in self.commands]
@@ -123,6 +123,10 @@ class WormholeBot(commands.Bot):
     async def get_admins(self):
         config = await read_config()
         return config.get("admins", [])
+    
+    async def get_allowed_channels(self):
+        config = await read_config()
+        return config.get("channels", [])
 
     def is_itself(self, message):
         return message.author.id == self.user.id
@@ -162,7 +166,7 @@ async def on_message(message):
     if message.content.startswith(bot.command_prefix):
         return
 
-    if message.guild.id in await bot.get_servers():
+    if message.guild.id in await bot.get_servers() and message.chnanel.id in await bot.get_allowed_channels():
         msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
         
         if message.attachments:
