@@ -239,5 +239,13 @@ async def privacy_command(ctx):
         "- Your channel name\n"\
     )
 
+@bot.command(name="ping")
+async def ping_command(ctx):
+    """
+    %ping: Check if the bot is online
+    """
+    
+    await ctx.send("Pong!")
+
 if __name__ == "__main__":
     bot.start_wormhole()
