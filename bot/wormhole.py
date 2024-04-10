@@ -166,7 +166,7 @@ async def on_message(message):
     if message.content.startswith(bot.command_prefix):
         return
 
-    if message.guild.id in await bot.get_servers() and message.chnanel.id in await bot.get_allowed_channels():
+    if message.guild.id in await bot.get_servers() and message.channel.id in await bot.get_allowed_channels():
         msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
         
         if message.attachments:
