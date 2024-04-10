@@ -92,6 +92,8 @@ async def on_message(message):
         bot.is_itself(message)
         or message.author.id in await bot.get_banned_users()
         or message.guild.id in await bot.get_banned_servers()
+        or message.content.startswith("%")
+        or not message.guild
     ):
         return
 
