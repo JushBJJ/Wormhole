@@ -221,7 +221,7 @@ async def on_message(message):
 @bot.command(name="help")
 async def help_command(ctx):
     """
-    %help: Display this help message
+    %help: `Display this help message`
     """
     
     message = "The Wormhole Bot allows you to communicate with other servers."
@@ -234,7 +234,7 @@ async def help_command(ctx):
 @bot.command(name="stats")
 async def stats_command(ctx):
     """
-    %stats: Display the bot's stats
+    %stats: `Display the bot's stats`
     """
     n_servers = len(await bot.get_servers())
     n_users = sum([guild.member_count for guild in ctx.bot.guilds])
@@ -244,7 +244,7 @@ async def stats_command(ctx):
 @bot.command(name="connect")
 async def connect_command(ctx):
     """
-    %connect: Connect your server to the public. Do `%join` in the channel you want to connect. By default, all channels are not connected.
+    %connect: `Connect your server to the public. Do \'%join' in the channel you want to connect. By default, all channels are not connected.`
     """
     
     if await bot.user_is_admin(ctx):
@@ -268,7 +268,7 @@ async def connect_command(ctx):
 @bot.command(name="disconnect")
 async def disconnect_command(ctx):
     """
-    %disconnect: Disconnect your server
+    %disconnect: `Disconnect your server`
     """
     
     if await bot.user_is_admin(ctx):
@@ -292,7 +292,7 @@ async def disconnect_command(ctx):
 @bot.command(name="invite")
 async def invite_command(ctx):
     """
-    %invite: Invite this bot to your server
+    %invite: `Invite this bot to your server`
     """
     
     await ctx.send(f"https://discord.com/oauth2/authorize?client_id={bot.client_id}&permissions=68608&scope=bot")
@@ -300,7 +300,7 @@ async def invite_command(ctx):
 @bot.command(name="website")
 async def website_command(ctx):
     """
-    %website: Go to this bot's website
+    %website: `Go to this bot's website`
     """
     
     await ctx.send(WEBSITE_URL)
@@ -309,7 +309,7 @@ async def website_command(ctx):
 @bot.command(name="join")
 async def join_command(ctx):
     """
-    %join: Join the server. Automatically connects the server to the server if not already connected.
+    %join: `Join the server. Automatically connects the server to the server if not already connected.`
     """
     
     if ctx.guild.id not in await bot.get_servers():
@@ -336,7 +336,7 @@ async def join_command(ctx):
 @bot.command(name="leave")
 async def leave_command(ctx):
     """
-    %leave: Stops recieving messages channel. Does NOT disconnect your server.
+    %leave: `Stops recieving messages channel. Does NOT disconnect your server.`
     """
     
     config = await bot.get_config()
@@ -356,7 +356,7 @@ async def leave_command(ctx):
 @bot.command(name="privacy")
 async def privacy_command(ctx):
     """
-    %privacy: View the privacy policy
+    %privacy: `View the privacy policy`
     """
     
     await ctx.send(
@@ -374,7 +374,7 @@ async def privacy_command(ctx):
 @bot.command(name="ping")
 async def ping_command(ctx):
     """
-    %ping: Check if the bot is online
+    %ping: `Check if the bot is online`
     """
     
     await ctx.send("Pong!")
@@ -383,7 +383,7 @@ async def ping_command(ctx):
 @bot.command(name="autoindex")
 async def autoindex_old_channels_command(ctx):
     """
-    %autoindex: Automatically index all channels that has \"[CHANNEL: 1]\" in its topic for all guilds the bot is currently in.
+    %autoindex: `Automatically index all channels that has \"[CHANNEL: 1]\" in its topic for all guilds the bot is currently in.`
     """
 
     if ctx.author.id not in await bot.get_admins():
@@ -428,7 +428,7 @@ async def autoindex_old_channels_command(ctx):
 @bot.command(name="broadcast")
 async def broadcast_command(ctx):
     """
-    %broadcast: Broadcast a message to all connected servers
+    %broadcast: `Broadcast a message to all connected servers`
     """
     
     if ctx.author.id not in await bot.get_admins():
@@ -443,7 +443,7 @@ async def broadcast_command(ctx):
 @bot.command(name="config")
 async def config_command(ctx):
     """
-    %config: View the current config
+    %config: `View the current config`
     """
     
     config = await bot.get_config()
@@ -452,7 +452,7 @@ async def config_command(ctx):
 @bot.command(name="set_config")
 async def set_config_command(ctx, config_type: str, key: str, value: str):
     """
-    %set_config: Set a config value. Usage: %set_config [channel/server] [key] [value]
+    %set_config: `Set a config value. Usage: %set_config [channel/server] [key] [value]`
     """
     
     if ctx.author.id not in await bot.get_admins():
