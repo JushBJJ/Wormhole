@@ -3,14 +3,11 @@ import os
 from discord.ext import commands
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Constants
 ADMIN_ID = 0
 WEBSITE_URL = "<TBD>"
 
-# Bot initialization
 intents = discord.Intents.all()
 
 class WormholeBot(commands.Bot):
