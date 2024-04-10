@@ -36,8 +36,18 @@ class WormholeBot(commands.Bot):
         
     async def index_commands(self):
         self.bot_commands = [command for command in self.commands]
+        
+    async def filter_message(self, msg):
+        # TODO LLM Filtering
+        # TODO Make this optional for servers
+        
+        banned_words = await self.get_banned_words()
+        for word in banned_words:
+            msg = msg.replace(word, len(word) * "#")
 
-    async def global_msg(self, message, processed_message):
+        return msg
+
+    async def global_msg(self, message, msg):
         config = await self.get_config()
         guilds = list(self.guilds)
         
@@ -47,10 +57,15 @@ class WormholeBot(commands.Bot):
             elif guild.id in config["servers"]:
                 for channel in guild.text_channels:
                     if channel.id in config["channels"] and channel.id != message.channel.id:
-                        await channel.send(processed_message)
-
+                        filtered_msg = await self.filter_message(msg)
+                        await channel.send(filtered_msg)
+    
     async def get_config(self):
         return await read_config()
+    
+    async def get_banned_words(self):
+        config = await read_config()
+        return config.get("banned_words", [])
 
     async def get_banned_users(self):
         config = await read_config()
@@ -92,13 +107,15 @@ async def on_message(message):
         bot.is_itself(message)
         or message.author.id in await bot.get_banned_users()
         or message.guild.id in await bot.get_banned_servers()
-        or message.content.startswith("%")
         or not message.guild
     ):
         return
 
     await bot.index_commands()
     await bot.process_commands(message)
+    
+    if message.content.startswith(bot.command_prefix):
+        return
 
     if message.guild.id in await bot.get_servers():
         msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
