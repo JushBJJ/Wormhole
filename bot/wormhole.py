@@ -81,7 +81,7 @@ async def on_guild_join(guild):
     )
     if channel:
         await channel.send(
-            "Thanks for inviting me! To chat with other servers, say `%setup` in the channel you want to set me up in! For a full list of commands, say `%help`"
+            "Thanks for inviting me! To chat with other servers, say `%join` in the channel you want to connect! For a full list of commands, say `%help`"
         )
 
 
@@ -100,7 +100,7 @@ async def on_message(message):
     if message.guild.id in await bot.get_servers():
         logging.info(f"{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:\n{message.content}")
         await bot.global_msg(message)
-        await message.add_reaction("✅")
+        await message.add_reaction("✅") # TOOD make this optional
 
 
 @bot.command(name="help")
