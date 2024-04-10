@@ -37,7 +37,7 @@ class WormholeBot(commands.Bot):
     async def index_commands(self):
         self.bot_commands = [command for command in self.commands]
 
-    async def global_msg(self, message):
+    async def global_msg(self, message, processed_message):
         config = await self.get_config()
         guilds = list(self.guilds)
         
@@ -47,7 +47,7 @@ class WormholeBot(commands.Bot):
             elif guild.id in config["servers"]:
                 for channel in guild.text_channels:
                     if channel.id in config["channels"] and channel.id != message.channel.id:
-                        await channel.send(f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}")
+                        await channel.send(processed_message)
 
     async def get_config(self):
         return await read_config()
@@ -99,8 +99,14 @@ async def on_message(message):
     await bot.process_commands(message)
 
     if message.guild.id in await bot.get_servers():
-        logging.info(f"{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:\n{message.content}")
-        await bot.global_msg(message)
+        msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
+        
+        if message.attachments:
+            for attachment in message.attachments:
+                msg += f"\n{attachment.url}" or ""
+                
+        logging.info(msg)
+        await bot.global_msg(message, msg)
         await message.add_reaction("✅") # TOOD make this optional
 
 
