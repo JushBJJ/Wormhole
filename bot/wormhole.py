@@ -1,5 +1,6 @@
 import discord
 import logging
+import asyncio
 import os
 
 from discord.ext import commands
@@ -26,8 +27,34 @@ class WormholeBot(commands.Bot):
         
         self.bot_commands = []
         self.logger = self.configure_logging()
+        
+        self.default_channel_config_options = {
+            "react": True # DEFAULT
+        }
 
     def start_wormhole(self):
+        self.logger.warning("Updating config...")
+        config = asyncio.run(read_config())
+        
+        if not config:
+            self.logger.error("Error updating config. Exiting...")
+            return
+        
+        # Update Channels 
+        # TODO CLEAN???
+        for channel_id in config.get("channels", []):
+            # Add new configs
+            for key, value in self.default_channel_config_options.items():
+                if key not in config["channels"][channel_id]:
+                    config["channels"][channel_id][key] = value
+            
+            # Remove old configs
+            for key in config["channels"][channel_id].keys():
+                if key not in self.default_channel_config_options:
+                    del config["channels"][channel_id][key]
+        
+        asyncio.run(write_config(config))
+                
         self.logger.warning("Starting Wormhole...")
         self.run(self.token)
         
@@ -97,7 +124,7 @@ class WormholeBot(commands.Bot):
                 continue
             elif guild.id in config["servers"]:
                 for channel in guild.text_channels:
-                    if channel.id in config["channels"] and channel.id != message.channel.id:
+                    if str(channel.id) in config["channels"] and channel.id != message.channel.id:
                         filtered_msg = await self.filter_message(msg)
                         await channel.send(filtered_msg)
     
@@ -170,21 +197,25 @@ async def on_message(message):
     
     if message.content.startswith(bot.command_prefix):
         return
+    
+    allowed_channels = await bot.get_allowed_channels()
 
-    if message.guild.id in await bot.get_servers() and message.channel.id in await bot.get_allowed_channels():
+    if message.guild.id in await bot.get_servers() and str(message.channel.id) in allowed_channels:
         msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
         
         if message.attachments:
             for attachment in message.attachments:
                 msg += f"\n{attachment.url}" or ""
+        
+        # TODO embed support
                 
         bot.logger.info(msg)
         await bot.global_msg(message, msg)
         
         channel_config = await bot.get_allowed_channels(as_list=False)
-        #if 
-        #    await message.add_reaction("✅")
-        await message.add_reaction("✅") # TOOD make this optional
+        
+        if channel_config.get(str(message.channel.id), {}).get("react", False):
+            await message.add_reaction("✅")
 
 
 @bot.command(name="help")
@@ -291,7 +322,10 @@ async def join_command(ctx):
         await ctx.send("This channel is already connected.")
         return
     
-    config["channels"].append(channel_id)
+    config["channels"][channel_id] = {}
+    
+        
+    
     if await write_config(config):
         await ctx.send("Connected channel")
     else:
@@ -390,10 +424,75 @@ async def autoindex_old_channels_command(ctx):
     bot.logger.info("Auto-indexing complete.")
     await ctx.send("Auto-indexing complete.")
 
+@bot.command(name="config")
+async def config_command(ctx):
+    """
+    %config: View the current config
+    """
+    
+    config = await bot.get_config()
+    await ctx.send(f"```json\n{config}```")
+
+@bot.command(name="set_config")
+async def set_config_command(ctx, config_type: str, key: str, value: str):
+    """
+    %set_config: Set a config value. Usage: %set_config [channel/server] [key] [value]
+    """
+    
+    if ctx.author.id not in await bot.get_admins():
+        await ctx.send("You must be an admin to use this command.")
+        return
+    
+    # Get args
+    if config_type not in ["channel", "server"]:
+        await ctx.send("Invalid config type. Must be either channel or server.")
+        return
+    
+    if config_type == "channel":
+        if key not in bot.default_channel_config_options:
+            await ctx.send(f"Invalid key: {key}")
+            await ctx.send(f"Valid keys: {', '.join(bot.default_channel_config_options.keys())}")
+            return
+        
+        value_type = type(bot.default_channel_config_options[key])
+        
+        if value_type == bool:
+            try:
+                value = bool(value)
+            except ValueError:
+                await ctx.send("Value must be a boolean.")
+                return
+        elif value_type == int:
+            try:
+                value = int(value)
+            except ValueError:
+                await ctx.send("Value must be an integer.")
+                return
+        elif value_type == str:
+            value = str(value)
+        else:
+            await ctx.send("Invalid value type.")
+            return
+        
+    elif config_type == "server":
+        await ctx.send("Server configuration not implemented yet.")
+        return
+    else:
+        await ctx.send("Invalid config type. uhh this shouldn't be executing...")
+        return
+    
+    config = await bot.get_config()
+
+    config[key] = value
+    await write_config(config)
+    await ctx.send(f"Set {key} to {value}")
+
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.errors.CommandNotFound):
         await ctx.send("Command not found. Say `%help` for a list of commands.")
+    elif isinstance(error, commands.errors.MissingRequiredArgument):
+        await ctx.send("Missing required argument. Say `%help` for a list of commands.")
     else:
         await ctx.send(f"An error occured: {error}")
 
