@@ -377,5 +377,12 @@ async def autoindex_old_channels_command(ctx):
     bot.logger.info("Auto-indexing complete.")
     await ctx.send("Auto-indexing complete.")
 
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.errors.CommandNotFound):
+        await ctx.send("Command not found. Say `%help` for a list of commands.")
+    else:
+        await ctx.send(f"An error occured: {error}")
+
 if __name__ == "__main__":
     bot.start_wormhole()
