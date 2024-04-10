@@ -119,15 +119,15 @@ class WormholeBot(commands.Bot):
         config = await self.get_config()
         guilds = list(self.guilds)
         
+        bot.logger.info(msg)
+                
+        if embed:
+            bot.logger.info(f"Embed: {embed}")
+        
         for guild in guilds:
             if guild.id in config["banned_servers"]:
                 continue
-            elif guild.id in config["servers"]:
-                bot.logger.info(msg)
-                
-                if embed:
-                    bot.logger.info(f"Embed: {embed}")
-                    
+            elif guild.id in config["servers"]:                    
                 for channel in guild.text_channels:
                     if str(channel.id) in config["channels"] and channel.id != message.channel.id:
                         filtered_msg = await self.filter_message(msg)
