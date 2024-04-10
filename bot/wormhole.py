@@ -142,8 +142,10 @@ async def connect_command(ctx):
         
         config["servers"].append(ctx.guild.id)
         if await write_config(config):
+            logging.info(f"Connected to {ctx.guild.name}")
             await ctx.send("Connected to the public server.")
         else:
+            logging.error(f"Error connecting to {ctx.guild.name}")
             await ctx.send("Error connecting to the public server. Please contact @JushBJJ")
     else:
         await ctx.send("You must be a server admin to use this command.")
@@ -164,8 +166,10 @@ async def disconnect_command(ctx):
             return
         
         if await write_config(config):
+            logging.info(f"Disconnected from {ctx.guild.name}")
             await ctx.send("Disconnected from the public server.")
         else:
+            logging.error(f"Error disconnecting from {ctx.guild.name}")
             await ctx.send("Error disconnecting from the public server. Please contact @JushBJJ")
     else:
         await ctx.send("You must be a server admin to use this command.")
