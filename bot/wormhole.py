@@ -6,7 +6,7 @@ from discord.ext import commands
 from bot.utils.file import read_config, write_config
 
 ADMIN_ID = 0
-WEBSITE_URL = "https://wormhole.@JushBJJbjj.com"
+WEBSITE_URL = "https://wormhole.jushbjj.com"
 
 intents = discord.Intents.all()
 
