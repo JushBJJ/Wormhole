@@ -1,9 +1,13 @@
 import discord
 import logging
+import asyncio
 import os
 
 from discord.ext import commands
 from bot.utils.file import read_config, write_config
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ADMIN_ID = 0
 WEBSITE_URL = "https://wormhole.jushbjj.com"
@@ -19,45 +23,51 @@ class WormholeBot(commands.Bot):
         self.token = os.getenv("token", "")
         self.remove_command("help")
         
-        self.bot_commands = [
-            self.help_command   
-        ]
+        self.bot_commands = []
 
     def start_wormhole(self):
+        logging.warning("Starting Wormhole...")
         self.run(self.token)
 
     async def on_ready(self):
+        await self.index_commands()
         print("Wormhole Loaded.")
+        
+    async def index_commands(self):
+        self.bot_commands = [command for command in self.commands]
 
     async def global_msg(self, message):
         config = await self.get_config()
-        guilds = message.bot.guilds
+        guilds = list(self.guilds)
         
         for guild in guilds:
             if guild.id in config["banned_servers"]:
                 continue
             elif guild.id in config["servers"]:
                 for channel in guild.text_channels:
-                    if channel.id in config["channels"] and channel.id not in config["banned_channels"]:
-                        await channel.send(message.content)
+                    if channel.id in config["channels"] and channel.id not in config["banned_servers"]:
+                        await channel.send(f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}")
 
     async def get_config(self):
         return await read_config()
 
     async def get_banned_users(self):
         config = await read_config()
-        return await config.get("banned_users", [])
+        return config.get("banned_users", [])
 
     async def get_banned_servers(self):
         config = await read_config()
-        return await config.get("banned_servers", [])
+        return config.get("banned_servers", [])
 
     async def get_servers(self):
         config = await read_config()
-        return await config.get("servers", [])
+        return config.get("servers", [])
 
     def is_itself(self, message):
         return message.author.id == self.user.id
+    
+    def user_is_admin(self, ctx):
+        return ctx.author.guild_permissions.VALID_FLAGS.get("administrator", False)
 
 
 bot = WormholeBot(command_prefix="%", intents=intents)
@@ -79,17 +89,17 @@ async def on_guild_join(guild):
 async def on_message(message):
     if (
         bot.is_itself(message)
-        or message.author.id in bot.get_banned_users()
-        or message.guild.id in bot.get_banned_servers()
+        or message.author.id in await bot.get_banned_users()
+        or message.guild.id in await bot.get_banned_servers()
     ):
         return
 
-    
+    await bot.index_commands()
     await bot.process_commands(message)
 
-    if message.server.id in bot.get_servers():
-        logging.info(f"[{message.guild.name}] {message.author.id} ({message.author.nick}): {message.content}")
-        await bot.global_msg(message, others_only=True)
+    if message.guild.id in await bot.get_servers():
+        logging.info(f"{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:\n{message.content}")
+        await bot.global_msg(message)
         await message.add_reaction("✅")
 
 
@@ -102,7 +112,7 @@ async def help_command(ctx):
     message = "The Wormhole Bot allows you to communicate with other servers."
     
     for command in bot.bot_commands:
-        message += f"\n{command.__doc__}"
+        message += f"\n{command.help}"
     
     await ctx.send(message)
 
@@ -111,7 +121,7 @@ async def stats_command(ctx):
     """
     %stats: Display the bot's stats
     """
-    n_servers =-len(bot.get_servers())
+    n_servers =-len(await bot.get_servers())
     n_users = sum([guild.member_count for guild in ctx.bot.guilds])
     
     await ctx.send(f"Connected to {n_servers} servers.\nTotal {n_users} users.")
@@ -119,12 +129,10 @@ async def stats_command(ctx):
 @bot.command(name="connect")
 async def connect_command(ctx):
     """
-    %connect: Connect your server to the public.
-    
-    Do `%join` in the channel you want to connect. By default, all channels are not connected.
+    %connect: Connect your server to the public. Do `%join` in the channel you want to connect. By default, all channels are not connected.
     """
     
-    if ctx.author.administrator:
+    if bot.user_is_admin(ctx):
         config = await bot.get_config()
         
         # Check if the server is already connected
@@ -146,7 +154,7 @@ async def disconnect_command(ctx):
     %disconnect: Disconnect from the public server
     """
     
-    if ctx.author.administrator:
+    if bot.user_is_admin(ctx):
         config = await bot.get_config()
         
         try:
@@ -184,8 +192,8 @@ async def join_command(ctx):
     %join: Join the public server. Automatically connects the server to the public server if not already connected.
     """
     
-    if ctx.guild.id not in bot.get_servers():
-        ctx.invoke(connect_command)
+    if ctx.guild.id not in await bot.get_servers():
+        await ctx.invoke(connect_command)
     
     config = await bot.get_config()
     channel_id = ctx.channel.id
