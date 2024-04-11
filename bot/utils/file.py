@@ -10,8 +10,6 @@ if os.path.exists("./config.json"):
 
 async def read_config() -> dict:
     # Decide whether to use the default config or the user's config
-    filename = "./default_config.json"
-    
     async with aiofiles.open(config_file, mode="r") as file:
         try:
             return json.loads(await file.read())
@@ -34,4 +32,3 @@ async def write_config(data: dict) -> bool:
         except Exception as e:
             logging.error(f"Error writing to file: {e}")
             return False
-        

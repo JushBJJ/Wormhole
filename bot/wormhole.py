@@ -1,9 +1,12 @@
 import discord
 import logging
 import asyncio
+import redis.asyncio as aioredis
+import json
 import os
 
 from discord.ext import commands
+
 from bot.utils.file import read_config, write_config
 from colorlog import ColoredFormatter
 from dotenv import load_dotenv
@@ -31,6 +34,12 @@ class WormholeBot(commands.Bot):
         self.default_channel_config_options = {
             "react": True # DEFAULT
         }
+        
+        self.redis = aioredis.from_url("redis://localhost", decode_responses=True)
+
+    async def setup_hook(self):
+        self.bg_task = asyncio.create_task(self.redis_subscriber())
+        
 
     def start_wormhole(self):
         self.logger.warning("Updating config...")
@@ -42,6 +51,7 @@ class WormholeBot(commands.Bot):
         
         # Update Channels 
         # TODO CLEAN???
+        # TODO Add telegram config
         for channel_id in config.get("channels", []):
             # Add new configs
             for key, value in self.default_channel_config_options.items():
@@ -52,9 +62,8 @@ class WormholeBot(commands.Bot):
             for key in config["channels"][channel_id].keys():
                 if key not in self.default_channel_config_options:
                     del config["channels"][channel_id][key]
-        
+                    
         asyncio.run(write_config(config))
-                
         self.logger.warning("Starting Wormhole...")
         self.run(self.token)
         
@@ -114,24 +123,72 @@ class WormholeBot(commands.Bot):
             msg = msg.replace(word, len(word) * "#")
 
         return msg
+    
+    async def redis_subscriber(self):
+        sub = self.redis.pubsub()
+        await sub.subscribe("wormhole_channel")
+        
+        async for message in sub.listen():
+            print(message)
+            if message["type"] == "message":
+                data = json.loads(message["data"])
+                msg = data.get("message", "")
+                discord_only = bool(data.get("discord_only", False))
+                await self.global_msg(None, msg, discord_only=discord_only)
 
-    async def global_msg(self, message, msg, embed=[]):
+    async def global_msg(self, message, msg, embed=None, discord_only=False):
         config = await self.get_config()
         guilds = list(self.guilds)
         
         bot.logger.info(msg)
-                
+        
+        msg_discord=""
+        msg_telegram=""
+        current_channel = 0 if message==None else message.channel.id
+        
+        if msg.startswith(f"[TELEGRAM]") or msg.startswith(f"[DISCORD]"):
+            # Get message from start to first newline
+            header, msg = msg.split("\n", maxsplit=1)
+            
+            # Telegram Format
+            temp_header = "<b>"+header+"</b>"
+            msg_telegram=temp_header+msg
+            
+            # Now do discord
+            temp_header = "```"+header+"```"
+            msg_discord=temp_header+msg
+        else:
+            msg_discord=msg
+            msg_telegram=msg
+
+        # Discord
         if embed:
             bot.logger.info(f"Embed: {embed}")
+        
+            if embed.type=="image":
+                embed=None
         
         for guild in guilds:
             if guild.id in config["banned_servers"]:
                 continue
             elif guild.id in config["servers"]:                    
                 for channel in guild.text_channels:
-                    if str(channel.id) in config["channels"] and channel.id != message.channel.id:
-                        filtered_msg = await self.filter_message(msg)
+                    if str(channel.id) in list(config["channels"]) and channel.id != current_channel:
+                        filtered_msg = await self.filter_message(msg_discord)
                         await channel.send(filtered_msg, embed=embed)
+                        
+        # Telegram
+        if not discord_only:
+            data = {
+                "message": msg_telegram,
+                "telegram_only": True,
+            }
+            
+            data = json.dumps(data)
+            
+            await self.redis.publish("telegram_channel", data)
+            if embed:
+                await self.redis.publish("telegram_channel", data)
     
     async def get_config(self):
         return await read_config()
@@ -170,8 +227,7 @@ class WormholeBot(commands.Bot):
         is_manually_admin = ctx.author.id in await self.get_admins()
         is_admin = ctx.author.guild_permissions.administrator
         return is_admin or is_manually_admin
-
-
+                
 bot = WormholeBot(command_prefix="%", intents=intents)
 
 
@@ -206,7 +262,7 @@ async def on_message(message):
     allowed_channels = await bot.get_allowed_channels()
 
     if message.guild.id in await bot.get_servers() and str(message.channel.id) in allowed_channels:
-        msg = f"```{message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:```{message.content}"
+        msg = f"[DISCORD] {message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:\n{message.content}"
         embed = None
         
         if message.attachments:
@@ -215,7 +271,9 @@ async def on_message(message):
         
         if message.embeds:
             embed = discord.Embed.from_dict(message.embeds[0].to_dict())
-            
+
+        # TODO Add sticker support
+        
         await bot.global_msg(message, msg, embed=embed)
         
         channel_config = await bot.get_allowed_channels(as_list=False)
