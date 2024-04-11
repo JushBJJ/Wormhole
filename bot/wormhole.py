@@ -41,6 +41,18 @@ class WormholeBot(commands.Bot):
         self.bg_task = asyncio.create_task(self.redis_subscriber())
         
 
+    async def redis_subscriber(self):
+        sub = self.redis.pubsub()
+        await sub.subscribe("wormhole_channel")
+        
+        async for message in sub.listen():
+            print(message)
+            if message["type"] == "message":
+                data = json.loads(message["data"])
+                msg = data.get("message", "")
+                discord_only = bool(data.get("discord_only", False))
+                await self.global_msg(None, msg, discord_only=discord_only)
+
     def start_wormhole(self):
         self.logger.warning("Updating config...")
         config = asyncio.run(read_config())
@@ -123,18 +135,6 @@ class WormholeBot(commands.Bot):
             msg = msg.replace(word, len(word) * "#")
 
         return msg
-    
-    async def redis_subscriber(self):
-        sub = self.redis.pubsub()
-        await sub.subscribe("wormhole_channel")
-        
-        async for message in sub.listen():
-            print(message)
-            if message["type"] == "message":
-                data = json.loads(message["data"])
-                msg = data.get("message", "")
-                discord_only = bool(data.get("discord_only", False))
-                await self.global_msg(None, msg, discord_only=discord_only)
 
     async def global_msg(self, message, msg, embed=None, discord_only=False):
         config = await self.get_config()

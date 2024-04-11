@@ -112,5 +112,7 @@ class TelegramBot:
             
             if update.message.sticker:
                 await self.global_msg("Stickers are not supported yet...", telegram_only=False, local_chat_id=chat_id)
+
+            # TODO figure out adding reactions to confirm message
         else:
             await update.message.reply_text("You are not in the Wormhole system.")
