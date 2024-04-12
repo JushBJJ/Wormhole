@@ -1,5 +1,4 @@
 import discord
-import logging
 import asyncio
 import redis.asyncio as aioredis
 import json
@@ -8,14 +7,14 @@ import os
 from discord.ext import commands
 
 from bot.utils.file import read_config, write_config
-from colorlog import ColoredFormatter
+from bot.utils.logging import configure_logging
 from dotenv import load_dotenv
 
 load_dotenv()
 
 ADMIN_ID = 0
 WEBSITE_URL = "https://wormhole.jushbjj.com"
-REPO = "https://github.com/JushBJJ/Wormhole-DIscord-Bot"
+REPO = "https://github.com/JushBJJ/Wormhole"
 
 intents = discord.Intents.all()
 
@@ -29,7 +28,7 @@ class WormholeBot(commands.Bot):
         self.remove_command("help")
         
         self.bot_commands = []
-        self.logger = self.configure_logging()
+        self.logger = configure_logging()
         
         self.default_channel_config_options = {
             "react": True # DEFAULT
@@ -50,8 +49,7 @@ class WormholeBot(commands.Bot):
             if message["type"] == "message":
                 data = json.loads(message["data"])
                 msg = data.get("message", "")
-                discord_only = bool(data.get("discord_only", False))
-                await self.global_msg(None, msg, discord_only=discord_only)
+                await self.global_msg(None, msg, discord_only=True)
 
     def start_wormhole(self):
         self.logger.warning("Updating config...")
@@ -78,45 +76,6 @@ class WormholeBot(commands.Bot):
         asyncio.run(write_config(config))
         self.logger.warning("Starting Wormhole...")
         self.run(self.token)
-        
-    def configure_logging(self):
-        # Create a custom logger
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO)
-        
-        # Create handlers
-        c_handler = logging.StreamHandler()
-        f_handler = logging.FileHandler('wormhole.log')
-        c_handler.setLevel(logging.INFO)
-        f_handler.setLevel(logging.INFO)
-        
-        # Create formatters and add it to handlers
-        # Using colorlog for console handler
-        c_format = ColoredFormatter(
-            '%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s%(reset)s',
-            datefmt=None,
-            reset=True,
-            log_colors={
-                'DEBUG': 'cyan',
-                'INFO': 'green',
-                'WARNING': 'yellow',
-                'ERROR': 'red',
-                'CRITICAL': 'red,bg_white',
-            },
-            secondary_log_colors={},
-            style='%'
-        )
-        # Standard formatter for file handler
-        f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        
-        c_handler.setFormatter(c_format)
-        f_handler.setFormatter(f_format)
-        
-        # Add handlers to the logger
-        logger.addHandler(c_handler)
-        logger.addHandler(f_handler)
-        
-        return logger
     
 
     async def on_ready(self):
@@ -141,25 +100,13 @@ class WormholeBot(commands.Bot):
         guilds = list(self.guilds)
         
         bot.logger.info(msg)
-        
-        msg_discord=""
-        msg_telegram=""
         current_channel = 0 if message==None else message.channel.id
-        
-        if msg.startswith(f"[TELEGRAM]") or msg.startswith(f"[DISCORD]"):
-            # Get message from start to first newline
-            header, msg = msg.split("\n", maxsplit=1)
-            
-            # Telegram Format
-            temp_header = "<b>"+header+"</b>"
-            msg_telegram=temp_header+msg
-            
-            # Now do discord
-            temp_header = "```"+header+"```"
-            msg_discord=temp_header+msg
-        else:
-            msg_discord=msg
-            msg_telegram=msg
+
+        # Cleaner
+        header, msg = msg.split("\n", maxsplit=1)
+        msg_discord = "```"+header+"```" + "\n" + msg
+        msg_telegram = "<b>"+header+"</b>" + "\n" + msg
+        msg_signal = header + "\n" + msg
 
         # Discord
         if embed:
@@ -179,16 +126,8 @@ class WormholeBot(commands.Bot):
                         
         # Telegram
         if not discord_only:
-            data = {
-                "message": msg_telegram,
-                "telegram_only": True,
-            }
-            
-            data = json.dumps(data)
-            
-            await self.redis.publish("telegram_channel", data)
-            if embed:
-                await self.redis.publish("telegram_channel", data)
+            await self.redis.publish("telegram_channel", json.dumps({"message": msg_telegram, "telegram_only": True}))
+            await self.redis.publish("signal_channel", json.dumps({"message": msg_signal, "signal_only": True}))
     
     async def get_config(self):
         return await read_config()

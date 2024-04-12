@@ -7,7 +7,17 @@
 
     ],
     "channels": {
-       
+
+    },
+    "telegram": {
+        "channels": {
+
+        }
+    },
+    "signal": {
+        "groups": {
+
+            }
     },
     "banned_servers": [],
     "banned_users": [],

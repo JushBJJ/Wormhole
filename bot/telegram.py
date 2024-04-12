@@ -9,6 +9,7 @@ import os
 
 
 from bot.utils.file import read_config, write_config
+from bot.utils.logging import configure_logging
 
 class TelegramBot:
     def __init__(self):
@@ -23,13 +24,15 @@ class TelegramBot:
         self.default_channel_config_options = {
             "react": True # DEFAULT
         }
+        
+        self.logger=configure_logging()
 
     def start_wormhole(self):
         self.redis = aioredis.from_url("redis://localhost", decode_responses=True)
-        print("Starting subscriber thread...")
+        self.logger.info("Starting subscriber thread...")
         thread = threading.Thread(target=self.run_aioredis_loop, daemon=True)
         thread.start()
-        print("Starting Telegram bot...")
+        self.logger.info("Starting Telegram bot...")
         self.bot.run_polling(allowed_updates=telegram.Update.ALL_TYPES)
     
     def run_aioredis_loop(self):
@@ -40,7 +43,7 @@ class TelegramBot:
         await sub.subscribe("telegram_channel")
         
         async for message in sub.listen():
-            print(message)
+            self.logger.info(message)
             if message["type"] == "message":
                 data = json.loads(message["data"])
                 msg = data.get("message", "")
@@ -58,6 +61,7 @@ class TelegramBot:
             for key, value in self.default_channel_config_options.items():
                 config["telegram"]["channels"][chat_id][key] = value
             
+            self.logger.info(f"Adding chat ID {chat_id} to the Wormhole system.")
             await write_config(config)
             await update.message.reply_text("You have been added to the Wormhole system.")
         elif config.get("telegram", {})=={} or config.get("telegram", {}).get("channels", {})=={}:
@@ -69,6 +73,7 @@ class TelegramBot:
         
         try:
             config["telegram"]["channels"].pop(chat_id)
+            self.logger.info(f"Removing chat ID {chat_id} from the Wormhole system.")
             await write_config(config)
             await update.message.reply_text("You have been removed from the Wormhole system.")
         except KeyError:
@@ -85,18 +90,15 @@ class TelegramBot:
                 else:
                     # Usually means that this came from the local class
                     if chat_id!=local_chat_id:
+                        self.logger.info(f"Sending message to Telegram: {msg}")
                         await self.bot.bot.send_message(chat_id, msg)
             except Exception as e:
                 self.logger.error(f"Error sending message to Telegram: {e}")
                 self.logger.error(f"Chat ID: {chat_id}")
     
         if not telegram_only:
-            data = json.dumps({
-                "message": msg,
-                "discord_only": True,
-            })
-            
-            await self.redis.publish("wormhole_channel", data)
+            await self.redis.publish("wormhole_channel", json.dumps({"message": msg, "discord_only": telegram_only}))
+            await self.redis.publish("signal_channel", json.dumps({"message": msg, "signal_only": telegram_only}))
     
     async def echo(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
         """Echo the user message."""
@@ -109,6 +111,7 @@ class TelegramBot:
         if chat_id in list(config.get("telegram", {}).get("channels", [])):
             msg = f"[TELEGRAM]  (ID: {update.effective_chat.id}) - {update.effective_user.first_name} says:\n{update.message.text}"
             await self.global_msg(msg, telegram_only=False, local_chat_id=chat_id)
+            self.logger.info(f"Received message from Telegram: {msg}")
             
             if update.message.sticker:
                 await self.global_msg("Stickers are not supported yet...", telegram_only=False, local_chat_id=chat_id)
