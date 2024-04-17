@@ -4,12 +4,11 @@ Inter-server communication bot
 ## Supports
 - Discord
 - Telegram
+- Signal
 
-## Planned Support
-- Signal <--- I am here
-- HexChat IRC
-- SSL Node???
-- Email???
+# TODO
+- Optimize speed
+- "Decentralised" discord servers
 
 ## Guide
 Coming soon.
