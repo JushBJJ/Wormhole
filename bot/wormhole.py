@@ -1,3 +1,4 @@
+import time
 import discord
 import asyncio
 import redis.asyncio as aioredis
@@ -35,6 +36,7 @@ class WormholeBot(commands.Bot):
         }
         
         self.redis = aioredis.from_url("redis://localhost", decode_responses=True)
+        self.last_message = [time.time(), 0]
 
     async def setup_hook(self):
         self.bg_task = asyncio.create_task(self.redis_subscriber())
@@ -95,7 +97,7 @@ class WormholeBot(commands.Bot):
 
         return msg
 
-    async def global_msg(self, message, msg, embed=None, discord_only=False):
+    async def global_msg(self, message, msg, embed=None, discord_only=False, no_header=False):
         config = await self.get_config()
         guilds = list(self.guilds)
         
@@ -103,10 +105,15 @@ class WormholeBot(commands.Bot):
         current_channel = 0 if message==None else message.channel.id
 
         # Cleaner
-        header, msg = msg.split("\n", maxsplit=1)
-        msg_discord = "```"+header+"```" + "\n" + msg
-        msg_telegram = "<b>"+header+"</b>" + "\n" + msg
-        msg_signal = header + "\n" + msg
+        if not no_header:
+            header, msg = msg.split("\n", maxsplit=1)
+            msg_discord = "```"+header+"```" + "\n" + msg
+            msg_telegram = "<b>"+header+"</b>" + "\n" + msg
+            msg_signal = header + "\n" + msg
+        else:
+            msg_discord = msg
+            msg_telegram = msg
+            msg_signal = msg
 
         # Discord
         if embed:
@@ -201,7 +208,20 @@ async def on_message(message):
     allowed_channels = await bot.get_allowed_channels()
 
     if message.guild.id in await bot.get_servers() and str(message.channel.id) in allowed_channels:
-        msg = f"[DISCORD] {message.channel.name} ({message.guild.name}) (ID: {message.author.id}) - {message.author.display_name} says:\n{message.content}"
+        msg = f"[DISCORD] {message.channel.name} ({message.guild.name}) -  {message.author.display_name} says:\n{message.content}"
+        
+        last_message_t = time.time()
+        author_id = message.author.id
+        no_header = False
+        
+        # ik shit implementation but i got other projects to work on
+
+        if last_message_t - bot.last_message[0] < (1000 * 60) and author_id == bot.last_message[1]:
+            msg = message.content
+            no_header= True
+        else:
+            bot.last_message = [last_message_t, author_id]
+            
         embed = None
         
         if message.attachments:
@@ -213,7 +233,7 @@ async def on_message(message):
 
         # TODO Add sticker support
         
-        await bot.global_msg(message, msg, embed=embed)
+        await bot.global_msg(message, msg, embed=embed, no_header=no_header)
         
         channel_config = await bot.get_allowed_channels(as_list=False)
         
