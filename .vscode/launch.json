@@ -11,6 +11,30 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "Discord Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_discord.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Telegram Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_telegram.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Signal Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_signal.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }
