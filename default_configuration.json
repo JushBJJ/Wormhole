@@ -3,21 +3,35 @@
         706702251812716595,
         1190028762998378627
     ],
-    "servers": [
-
+    "servers": [],
+    "channel_list": [
+        "general",
+        "wormhole",
+        "happenings",
+        "qotd",
+        "memes",
+        "computers",
+        "finance",
+        "music",
+        "cats"
     ],
     "channels": {
-
-    },
-    "telegram": {
-        "channels": {
-
+        "wormhole": {
+            "1184178666587037736": {
+                "react": true
+            }
+        },
+        "general": {
+            "1206374294481932309": {
+                "react": false
+            }
         }
     },
+    "telegram": {
+        "channels": {}
+    },
     "signal": {
-        "groups": {
-
-            }
+        "groups": {}
     },
     "banned_servers": [],
     "banned_users": [],

@@ -38,7 +38,7 @@ class WormholeBot(commands.Bot):
         self.bot_commands = []
         self.logger = configure_logging()
 
-        self.default_channel_config_options = {"react": True}  # DEFAULT
+        self.default_channel_config_options = {"react": False}  # DEFAULT
 
         self.redis = aioredis.from_url("redis://localhost", decode_responses=True)
         self.last_message = [time.time(), 0]
@@ -68,16 +68,16 @@ class WormholeBot(commands.Bot):
         # Update Channels
         # TODO CLEAN???
         # TODO Add telegram config
-        for channel_id in config.get("channels", []):
-            # Add new configs
-            for key, value in self.default_channel_config_options.items():
-                if key not in config["channels"][channel_id]:
-                    config["channels"][channel_id][key] = value
+        for channel in config["channel_list"]:
+            if channel not in config["channels"]:
+                config["channels"][channel] = {}
 
-            # Remove old configs
-            for key in config["channels"][channel_id].keys():
-                if key not in self.default_channel_config_options:
-                    del config["channels"][channel_id][key]
+            for channel_id in config["channels"][channel]:
+                for key, value in self.default_channel_config_options.items():
+                    if key not in config["channels"][channel][channel_id]:
+                        config["channels"][channel][channel_id][key] = value
+                    elif key not in self.default_channel_config_options:
+                        del config["channels"][channel][channel_id][key]
 
         asyncio.run(write_config(config))
         self.logger.warning("Starting Wormhole...")
@@ -146,19 +146,35 @@ class WormholeBot(commands.Bot):
                     if attachment.url not in links:
                         links.append(attachment.url)
 
-        for guild in guilds:
-            if guild.id in config["banned_servers"]:
+        # Get channel category
+        category = ""
+        for channel in config["channels"]:
+            if str(current_channel) in config["channels"][channel].keys():
+                category = channel
+                break
+
+        # Discord
+        for channel in config["channels"][category]:
+            if channel == str(current_channel):
                 continue
-            elif guild.id in config["servers"]:
-                for channel in guild.text_channels:
-                    if (
-                        str(channel.id) in list(config["channels"])
-                        and channel.id != current_channel
-                    ):
-                        # filtered_msg = await self.filter_message(msg_discord)
-                        await channel.send(embed=embed)
-                        for link in links:
-                            await channel.send(link)
+
+            # Get channel object from ID
+            channel_class = self.get_channel(int(channel))
+
+            if channel_class == None:  # Channel doesn't exist
+                # TODO - Remove from config???
+                continue
+
+            guild_id = channel_class.guild.id
+
+            # Skip banned servers
+            if guild_id in await self.get_banned_servers():
+                continue
+
+            await channel_class.send(embed=embed)
+
+            for link in links:
+                await channel_class.send(link)
 
         # Telegram
         if not discord_only:
@@ -196,23 +212,37 @@ class WormholeBot(commands.Bot):
 
     async def get_allowed_channels(self, as_list=True):
         config = await read_config()
+        channel_list = [] if as_list else {}
 
-        if as_list:
-            return list(config.get("channels", []))
-        return config.get("channels", [])
+        for channel_name in config["channels"]:
+            if as_list:
+                channel_list.extend(
+                    list(config["channels"].get(channel_name, {}).keys())
+                )
+            else:
+                channel_list[channel_name] = config["channels"].get(channel_name, {})
 
-    def is_itself(self, message):
-        return message.author.id == self.user.id
+        return channel_list
 
     async def user_is_admin(self, ctx):
         is_manually_admin = ctx.author.id in await self.get_admins()
         is_admin = ctx.author.guild_permissions.administrator
         return is_admin or is_manually_admin
 
+    async def get_channel_category(self, channel_id):
+        config = await self.get_config()
+        for channel in config["channels"]:
+            if str(channel_id) in config["channels"][channel].keys():
+                return channel
+
+    def is_itself(self, message):
+        return message.author.id == self.user.id
+
 
 bot = WormholeBot(command_prefix="%", intents=intents)
 
 
+# TODO give specific options to join different channels
 @bot.event
 async def on_guild_join(guild):
     channel = next(
@@ -221,7 +251,7 @@ async def on_guild_join(guild):
     )
     if channel:
         await channel.send(
-            "Thanks for inviting me! To chat with other servers, say `%join` in the channel you want to connect! For a full list of commands, say `%help`"
+            "Thanks for inviting me! To chat with other servers, say `%join <channel name>` in the channel you want to connect! For a full list of commands, say `%help`"
         )
 
 
@@ -242,6 +272,7 @@ async def on_message(message):
         return
 
     allowed_channels = await bot.get_allowed_channels()
+    channel_category = await bot.get_channel_category(message.channel.id)
 
     if (
         message.guild.id in await bot.get_servers()
@@ -278,7 +309,11 @@ async def on_message(message):
 
         channel_config = await bot.get_allowed_channels(as_list=False)
 
-        if channel_config.get(str(message.channel.id), {}).get("react", False):
+        if (
+            channel_config[channel_category]
+            .get(str(message.channel.id), {})
+            .get("react", False)
+        ):
             await message.add_reaction("✅")
 
 
@@ -379,9 +414,9 @@ async def website_command(ctx):
 
 
 @bot.command(name="join")
-async def join_command(ctx):
+async def join_command(ctx, channel_name: str = "wormhole"):
     """
-    %join: `Join the server. Automatically connects the server to the server if not already connected.`
+    %join <channel name>: `Join the server. Automatically connects the server to the server if not already connected.`
     """
 
     if ctx.guild.id not in await bot.get_servers():
@@ -389,20 +424,36 @@ async def join_command(ctx):
 
     config = await bot.get_config()
     channel_id = str(ctx.channel.id)
+    channel_name = channel_name.lower()
 
-    if channel_id in list(config["channels"]):
+    if not channel_name in config["channel_list"]:
+        channel_list = ", ".join(config["channel_list"])
+        await ctx.send(
+            f'Invalid channel name. If you need want to add a new channel you to add them into the "channel_list" list in the config.json file.\nCant access the config file? Contact the bot owner.\n\nValid channel names: {channel_list}'
+        )
+        return
+    elif channel_id in list(config["channels"].get(channel_name, [])):
         await ctx.send("This channel is already connected.")
         return
+    elif channel_name not in config["channels"]:
+        config["channels"][channel_name] = {}
 
-    config["channels"][channel_id] = {}
+    config["channels"][channel_name][channel_id] = {}
 
     for key, value in bot.default_channel_config_options.items():
-        config["channels"][channel_id][key] = value
+        if key == "react" and channel_name == "wormhole":
+            config["channels"][channel_name][channel_id][key] = True
+            continue
+
+        config["channels"][channel_name][channel_id][key] = value
 
     if await write_config(config):
-        await ctx.send("Connected channel")
-    else:
-        await ctx.send("Error connecting channel. Please contact @JushBJJ")
+        await ctx.send(f"Connected to channel `{channel_name}`")
+        return
+
+    await ctx.send(
+        "Error connecting channel, failed to write into config file. Please try again. If persists, please contact @JushBJJ"
+    )
 
 
 @bot.command(name="leave")
@@ -413,17 +464,34 @@ async def leave_command(ctx):
 
     config = await bot.get_config()
     channel_id = str(ctx.channel.id)
+    channel_list = list(config["channel_list"])
 
-    try:
-        config["channels"].pop(channel_id)
-    except ValueError:
-        await ctx.send("This channel is not connected.")
-        return
+    for channel in channel_list:
+        if channel_id in list(config["channels"].get(channel, [])):
+            config["channels"][channel].pop(channel_id)
+            await write_config(config)
+            await ctx.send(
+                f"Left channel `{channel}`. If you want the server to be disconnected, say `%disconnect`"
+            )
+            return
 
-    if await write_config(config):
-        await ctx.send("Disconnected channel.")
-    else:
-        await ctx.send("Error disconnecting channel. Please contact @JushBJJ")
+    await ctx.send("Error disconnecting channel. Please contact @JushBJJ")
+
+
+@bot.command(name="channels")
+async def channels_command(ctx):
+    """
+    %channels: `View all available channels to connect`
+    """
+
+    config = await bot.get_config()
+    channels = config["channel_list"]
+
+    message = "Available channels:\n"
+    for channel in channels:
+        message += f"{channel}\n"
+
+    await ctx.send(message)
 
 
 @bot.command(name="privacy")
