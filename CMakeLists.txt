@@ -4,6 +4,8 @@ project(Wormhole_Node)
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/tox)
+
 add_executable(Wormhole_Node
     node/main.c
     node/tox_utils.c
