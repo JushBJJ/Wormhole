@@ -167,14 +167,14 @@ class WormholeBot(commands.Bot):
                     name=message.author.display_name,
                     icon_url=message.author.display_avatar.url,
                 )
-                embed.set_footer(text=f"UserID: {message.author.id}")
+                #embed.set_footer(text=f"UserID: {message.author.id}")
             else:
                 embed = discord.Embed(description=msg, color=0x000000)
                 embed.set_author(
                     name=message.author.display_name,
                     icon_url=message.author.display_avatar.url,
                 )
-                embed.set_footer(text=f"UserID: {message.author.id}")
+                #embed.set_footer(text=f"UserID: {message.author.id}")
 
                 if message.attachments:
                     for attachment in message.attachments:
