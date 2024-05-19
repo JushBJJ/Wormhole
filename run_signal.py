@@ -1,6 +1,6 @@
 import time
 
-from bot.signal import SignalBot
+from bot.signal.signal import SignalBot
 
 def main():
     bot = SignalBot('signal-cli', ['receive', '-t', '3'])

@@ -1,4 +1,4 @@
-from bot.telegram import TelegramBot
+from bot.telegram.telegram import TelegramBot
 from dotenv import load_dotenv
 
 load_dotenv()
