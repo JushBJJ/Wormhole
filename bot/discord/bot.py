@@ -84,6 +84,10 @@ class WormholeBot(commands.Bot):
                             await self.global_msg(
                                 None, msg, discord_only=True, no_header=True
                             )
+                        elif data.get("embed", None)!=None:
+                            embed = data.get("embed", None)
+                            category = data.get("category", None)
+                            await self.global_msg(None, msg, embed=embed, category=category, no_header=True, discord_only=True)
                         else:
                             await self.global_msg(None, msg, discord_only=True)
 
@@ -137,7 +141,7 @@ class WormholeBot(commands.Bot):
         return msg
 
     async def global_msg(
-        self, message, msg, embed=None, discord_only=False, no_header=False
+        self, message, msg, embed=None, discord_only=False, no_header=False, category=None
     ):
         config = await self.get_config()
 
@@ -176,14 +180,21 @@ class WormholeBot(commands.Bot):
                     for attachment in message.attachments:
                         if attachment.url not in links:
                             links.append(attachment.url)
+        elif embed!=None and type(embed)==dict:
+            embed = discord.Embed.from_dict(embed)
         else:
             embed = None
 
-        category = "wormhole" if current_channel == 0 else ""
-        for channel in config["channels"]:
-            if str(current_channel) in config["channels"][channel].keys():
-                category = channel
-                break
+        if category is None:
+            category = "wormhole" if current_channel == 0 else ""
+
+            for channel in config["channels"]:
+                if str(current_channel) in config["channels"][channel].keys():
+                    category = channel
+                    break
+        elif config["channels"].get(category, None) == None:
+            print(f"Unknown channel category {category}")
+            return
 
         for channel in config["channels"][category]:
             if channel == str(current_channel):
@@ -212,6 +223,7 @@ class WormholeBot(commands.Bot):
             {
                 "message": msg,
                 "embed": embed.to_dict() if embed else None,
+                "category": category
             }
         )
 
