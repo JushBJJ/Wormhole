@@ -1,37 +1,46 @@
-# Wormhole
-Inter-server communication bot
+## Table of Contents
 
-## Supports
-- Discord
-- Telegram
-- Signal
+1. [Wormhole](#wormhole)
+2. [Installation Guide (W.I.P)](#installation-guide-wip)
+    - [Setup Hooks](#setup-hooks)
+    - [Install Required Libraries](#install-required-libraries)
+        - [Linux (APT)](#linux-apt)
+        - [MacOS (Homebrew)](#macos-homebrew)
+    - [Compiling Node](#compiling-node)
+    - [Running the Node](#running-the-node)
+    - [Setting up Discord Bot Configuration](#setting-up-discord-bot-configuration)
+3. [Running Discord Bot](#running-discord-bot)
+4. [Update Wormhole](#update-wormhole)
+5. [Thanks to](#thanks-to)
 
-# TODO
-- Optimize speed
-- "Decentralised" discord servers
+### Wormhole
+Inter-server communication involves connecting Discord bots across different servers using the Tox P2P network, creating a decentralized system that can also interface with Signal and Telegram. This setup ensures minimal disruption if a bot goes down, as other bots in the network maintain connectivity.
 
-## Libraries needed
-- libtoxcore-dev
-- libhiredis-dev
-- redis-server
-- libsodium-dev
+You can literally create a discord server out of discord servers from this.
 
-## Installation Guide (W.I.P)
-### Setup Hooks
+### Installation Guide (W.I.P)
+#### Setup Hooks
 ```bash
 ./setup-hooks.sh
 ```
-### Install Required Libraries
-#### Linux (APT)
+#### Install Required Libraries
+##### Linux (APT)
 ```bash
 sudo apt install libtoxcore-dev libhiredis-dev redis-server libsodium-dev
+
+# Start Redis Server
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
 ```
-#### MacOS (Homebrew)
+##### MacOS (Homebrew)
 ```sh
 brew install toxcore hiredis redis sodium
+
+# Start Redis Server
+brew services start redis
 ```
 
-### Compiling Node
+#### Compiling Node
 ```bash
 # Make build directory
 mkdir build && cd build
@@ -43,8 +52,8 @@ cmake ..
 make
 ```
 
-### Running the node
-```
+#### Running the node
+```bash
 # Go back to previous directory from ./build
 cd ..
 
@@ -52,9 +61,9 @@ cd ..
 ./Wormhole_Node
 ```
 
-### Setting up discord bot configuration
+#### Setting up discord bot configuration
 1. Create a `.env` file
-```
+```bash
 client_id="<INSERT BOT CLIENT ID HERE>"
 token="<INSERT BOT TOKEN HERE>"
 ```
@@ -74,9 +83,12 @@ token="<INSERT BOT TOKEN HERE>"
 ```
 Don't confuse discord id with discord username.
 
+Things to note:
+- Your discord bot must have all intents enabled.
+
 ### Running discord bot
 ```bash
-# Create virtual environent
+# Create virtual environment
 python -m venv .venv
 source .venv/bin/activate
 
@@ -87,13 +99,17 @@ pip install -r requirements.txt
 python run_discord.py
 ```
 
-More coming soon...
+### Discord Setup Guide
+See [Guide.md](./Guide.md)
 
-## Update Wormhole
-Warning: This is may make breaking changes but there it will create a backup folder for you.
-```
+### Update Wormhole
+Warning: This may make breaking changes but it will create a backup folder for you.
+
+#### 1. Stop both the node and wormhole instances
+#### 2. Run the update script
+```bash
 ./update.sh
 ```
 
-## Thanks to
+### Thanks to
 - Gary
