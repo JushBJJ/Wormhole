@@ -1,0 +1,8 @@
+#!/bin/bash
+
+PRESERVE_ITEMS=("config.json" "tox/" ".env" "backup/")
+
+for ITEM in "${PRESERVE_ITEMS[@]}"; do
+    git checkout --ours "$ITEM"
+done
+

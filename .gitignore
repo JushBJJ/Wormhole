@@ -1,6 +1,10 @@
 # servers folder
 servers/
+backup/
+tox/
+.tox/
 config.json
+Wormhole_Node
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -17,6 +17,10 @@ Inter-server communication bot
 - libsodium-dev
 
 ## Installation Guide (W.I.P)
+### Setup Hooks
+```bash
+./setup-hooks.sh
+```
 ### Install Required Libraries
 #### Linux (APT)
 ```bash
@@ -84,6 +88,12 @@ python run_discord.py
 ```
 
 More coming soon...
+
+## Update Wormhole
+Warning: This is may make breaking changes but there it will create a backup folder for you.
+```
+./update.sh
+```
 
 ## Thanks to
 - Gary
