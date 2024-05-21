@@ -14,9 +14,7 @@
 5. [Thanks to](#thanks-to)
 
 ### Wormhole
-Inter-server communication involves connecting Discord bots across different servers using the Tox P2P network, creating a decentralized system that can also interface with Signal and Telegram. This setup ensures minimal disruption if a bot goes down, as other bots in the network maintain connectivity.
-
-You can literally create a discord server out of discord servers from this.
+Inter-server communication
 
 ### Installation Guide (W.I.P)
 #### Setup Hooks
