@@ -5,14 +5,17 @@ from bot.discord.bot import bot
 
 @bot.event
 async def on_guild_join(guild):
-    channel = next(
-        (c for c in guild.text_channels if guild.me.permissions_in(c).send_messages),
-        None,
-    )
-    if channel:
-        await channel.send(
-            "Thanks for inviting me! To chat with other servers, say `%join <channel name>` in the channel you want to connect! For a full list of commands, say `%help`"
+    try:
+        channel = next(
+            (c for c in guild.text_channels if guild.me.permissions_in(c).send_messages),
+            None,
         )
+        if channel:
+            await channel.send(
+                "Thanks for inviting me! To chat with other servers, say `%join <channel name>` in the channel you want to connect! For a full list of commands, say `%help`"
+            )
+    except Exception as e:
+        print(e)
 
 @bot.event
 async def on_message(message):
