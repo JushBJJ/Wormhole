@@ -3,6 +3,7 @@ servers/
 backup/
 tox/
 .tox/
+node_modules/
 config.json
 Wormhole_Node
 
