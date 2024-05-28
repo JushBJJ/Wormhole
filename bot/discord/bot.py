@@ -162,14 +162,20 @@ class WormholeBot(commands.Bot):
         links = re.findall(r"(https?://\S+)", msg)
 
         if current_channel != 0:
+            # Gold if you're an admin
+            color = 0x000000
+            if await self.user_is_admin(message):
+                color = 0xFFD700
+            
             if embed:
                 embed.set_author(
                     name=message.author.display_name,
                     icon_url=message.author.display_avatar.url,
                 )
+                embed.color = color
                 #embed.set_footer(text=f"UserID: {message.author.id}")
             else:
-                embed = discord.Embed(description=msg, color=0x000000)
+                embed = discord.Embed(description=msg, color=color)
                 embed.set_author(
                     name=message.author.display_name,
                     icon_url=message.author.display_avatar.url,
