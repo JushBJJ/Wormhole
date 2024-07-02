@@ -1,0 +1,66 @@
+{
+    "admins": [
+        706702251812716595,
+        1190028762998378627
+    ],
+    "servers": [],
+    "channel_list": [
+        "general",
+        "wormhole",
+        "happenings",
+        "qotd",
+        "memes",
+        "computers",
+        "finance",
+        "music",
+        "cats"
+    ],
+    "channels": {
+        "wormhole": {
+            "1184178666587037736": {
+                "react": true
+            }
+        },
+        "general": {
+            "1206374294481932309": {
+                "react": false
+            }
+        }
+    },
+    "banned_servers": [],
+    "banned_users": [],
+    "banned_words": [
+        "@here",
+        "\\@here",
+        "@everyone",
+        "\\@everyone"
+    ],
+    "users": {
+        "706702251812716595": {
+            "uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "role": "admin"
+        },
+        "1190028762998378627": {
+            "uuid": "550e8400-e29b-41d4-a716-446655440000",
+            "role": "moderator"
+        }
+    },
+    "roles": {
+        "admin": {
+            "color": "#FF0000",
+            "permissions": ["manage_channels", "manage_roles", "ban_users", "view_logs"]
+        },
+        "moderator": {
+            "color": "#00FF00",
+            "permissions": ["manage_messages", "timeout_users", "view_logs"]
+        },
+        "user": {
+            "color": "#0000FF",
+            "permissions": ["send_messages", "read_messages"]
+        }
+    },
+    "content_filter": {
+        "enabled": true,
+        "sensitivity": 0.7
+    }
+}
