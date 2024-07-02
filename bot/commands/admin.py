@@ -1,3 +1,5 @@
+import discord
+from typing import List, Union
 from discord.ext import commands
 from bot.config import ChannelConfig, WormholeConfig
 
@@ -6,13 +8,13 @@ def is_wormhole_admin():
         try:
             if not ctx.guild:
                 return False
-            
-            config = ctx.bot.config
-            user_id = str(ctx.author.id)
-            
+
+            config: WormholeConfig = ctx.bot.config
+            user_id: str = str(ctx.author.id)
+
             if config.get_user_role(user_id) == "admin":
                 return True
-            
+
             await ctx.send("You must be a Wormhole admin to run this command.")
             return False
         except Exception as e:
@@ -52,34 +54,45 @@ class AdminCommands(commands.Cog):
     @is_wormhole_admin()
     async def ban_user(self, ctx, user_id: int):
         """Ban a user from using the Wormhole bot"""
-        user_uuid = self.config.get_user_uuid(ctx.message.author.id)
+        user_hash = self.config.get_user_hash(ctx.message.author.id)
         if user_id not in self.config.banned_users:
-            self.config.banned_users.append(user_uuid)
-            await ctx.send(f"Banned user {user_uuid}")
+            self.config.banned_users.append(user_hash)
+            await ctx.send(f"Banned user {user_hash}")
         else:
-            await ctx.send(f"User {user_uuid} is already banned")
+            await ctx.send(f"User {user_hash} is already banned")
 
     @commands.command()
     @is_wormhole_admin()
     async def unban_user(self, ctx, user_id: int):
         """Unban a user from using the Wormhole bot"""
-        user_uuid = self.config.get_user_uuid(ctx.message.author.id)
+        user_hash = self.config.get_user_hash(ctx.message.author.id)
         if user_id in self.config.banned_users:
-            self.config.banned_users.remove(user_uuid)
-            await ctx.send(f"Unbanned user {user_uuid}")
+            self.config.banned_users.remove(user_hash)
+            await ctx.send(f"Unbanned user {user_hash}")
         else:
-            await ctx.send(f"User {user_uuid} is not banned")
+            await ctx.send(f"User {user_hash} is not banned")
 
     @commands.command()
     @is_wormhole_admin()
-    async def admin(self, ctx, user_id: int):
+    async def admin(self, ctx, user_hash: str):
         """Add a new admin to the wormhole bot"""
-        user_uuid = self.config.get_user_uuid(user_id)
-        if self.config.get_user_role(user_id)!="admin":
-            self.config.change_user_role(user_id, "admin")
-            await ctx.send(f"{user_uuid} is now a Wormhole Admin")
+        user = self.config.get_user_config_by_hash(user_hash)
+        if user.role!="admin":
+            self.config.change_user_role(user_hash, "admin")
+            await ctx.send(f"{user_hash} is now a Wormhole Admin")
         else:
-            await ctx.send(f"{user_uuid} is already a Wormhole Admin")
+            await ctx.send(f"{user_hash} is already a Wormhole Admin")
+
+    @commands.command()
+    @is_wormhole_admin()
+    async def unadmin(self, ctx, user_hash: str):
+        """Add a new admin to the wormhole bot"""
+        user = self.config.get_user_config_by_hash(user_hash)
+        if user.role!="user":
+            self.config.change_user_role(user_hash, "user")
+            await ctx.send(f"{user_hash} is now a Wormhole Admin")
+        else:
+            await ctx.send(f"{user_hash} is already a Wormhole User")
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))

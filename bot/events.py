@@ -3,9 +3,6 @@ import discord
 import json
 
 from discord.ext import commands
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
 class EventHandlers(commands.Cog):
     def __init__(self, bot):
@@ -33,32 +30,33 @@ class EventHandlers(commands.Cog):
         if str(message.channel.id) in self.bot.config.get_all_channel_ids():
             channel_config = self.bot.config.get_channel_by_id(message.channel.id)
             await channel_config.handle_config_pre(message, self.bot)
-            
+
             tox_message = json.dumps({
                 "message": f"{message.author.name}: {message.content}",
                 "from_discord": True
             })
             self.bot.redis_client.publish('tox_node', tox_message)
-            
+
             tasks = set()
             user_id = message.author.id
             display_name = message.author.display_name
             avatar = message.author.display_avatar.url
             content = message.content
-            user_uuid = self.bot.config.get_user_uuid(user_id)
-            
+            user_hash = self.bot.config.get_user_hash(user_id)
+
             embed = self.bot.pretty_message.to_embed(user_id, display_name, avatar, content)
             attachments = self.bot.pretty_message.to_attachments_message(message.attachments)
             embeds = self.bot.pretty_message.embeds_to_links(message.embeds)
             stickers_to_send, sticker_content = await self.bot.pretty_message.handle_stickers(message)
 
-            self.bot.pretty_message.create_rich_message_box(display_name, content, attachments, user_uuid)
-            
+            self.bot.pretty_message.create_rich_message_box(display_name, content, attachments, user_hash)
+            self.bot.config.users[str(user_id)].profile_picture = avatar
+            self.bot.config.add_username(user_id, display_name)
+
             for channel_id in self.bot.config.get_all_channels_by_id(message.channel.id):
                 if int(channel_id) == message.channel.id:
                     continue
                 channel = self.bot.get_channel(int(channel_id))
-                
                 if channel:
                     if stickers_to_send:
                         tasks.add(channel.send(embed=embed, stickers=stickers_to_send))
@@ -81,7 +79,6 @@ class EventHandlers(commands.Cog):
             if channel_name == "wormhole":
                 for _id in channel_id.keys():
                     channel = self.bot.get_channel(int(_id))
-                        
                     if channel:
                         continue
                         #await channel.send("Wormhole is now online!")
