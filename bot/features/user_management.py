@@ -1,4 +1,4 @@
-import uuid
+from bot.config import compute_user_hash
 from bot.config import WormholeConfig, UserConfig
 
 class UserManagement:
@@ -6,7 +6,7 @@ class UserManagement:
         self.config = config
 
     def add_user(self, user_id: int, role: str = "user") -> UserConfig:
-        user = UserConfig(uuid=str(uuid.uuid4), role=role)
+        user = UserConfig(hash=compute_user_hash(self, user_id), role=role)
         self.config.users[str(user_id)] = user
         return user
 

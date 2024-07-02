@@ -1,9 +1,8 @@
 import discord
-from bot.config import WormholeConfig, UserConfig
+from bot.config import WormholeConfig
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 class PrettyMessage:
     def __init__(self, config: WormholeConfig):
@@ -17,13 +16,13 @@ class PrettyMessage:
         ) -> discord.Embed:
 
         user_color = self.config.get_user_color(user_id)
-        user_uuid = self.config.get_user_uuid(user_id)
+        user_hash = self.config.get_user_hash(user_id)
         embed = discord.Embed(
             description = message,
             color = user_color
         )
         embed.set_author(name=display_name, icon_url=avatar)
-        embed.set_footer(text=f"({user_uuid})")
+        embed.set_footer(text=f"{user_hash}")
         return embed
     
     def to_attachments_message(self, attachments: list) -> str:

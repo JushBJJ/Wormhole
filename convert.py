@@ -51,6 +51,7 @@ def convert_config(input_file, output_file):
     for i, admin_id in enumerate(new_config["admins"]):
         role = "admin" if i == 0 else "user"
         new_config["users"][str(admin_id)] = {
+            # TODO convert to hash
             "uuid": generate_uuid(),
             "role": role
         }
