@@ -1,36 +1,25 @@
 import logging
-from colorlog import ColoredFormatter
+from logging.handlers import RotatingFileHandler
+import os
 
-def configure_logging():
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    
-    c_handler = logging.StreamHandler()
-    f_handler = logging.FileHandler('wormhole.log')
-    c_handler.setLevel(logging.INFO)
-    f_handler.setLevel(logging.INFO)
-    
-    c_format = ColoredFormatter(
-        '%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s%(reset)s',
-        datefmt=None,
-        reset=True,
-        log_colors={
-            'DEBUG': 'cyan',
-            'INFO': 'green',
-            'WARNING': 'yellow',
-            'ERROR': 'red',
-            'CRITICAL': 'red,bg_white',
-        },
-        secondary_log_colors={},
-        style='%'
-    )
+def setup_logging(log_file: str = 'logs/wormhole.log', log_level: int = logging.INFO):
+    logger = logging.getLogger('wormhole')
+    logger.setLevel(log_level)
 
-    f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    c_handler.setFormatter(c_format)
-    f_handler.setFormatter(f_format)
-    
-    logger.addHandler(c_handler)
-    logger.addHandler(f_handler)
-    
+    # Create logs directory if it doesn't exist
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+    # File handler
+    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(console_formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
     return logger
