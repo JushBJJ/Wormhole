@@ -1,11 +1,16 @@
-import discord
+import time
+from typing import Union
 from discord.ext import commands, tasks
-from bot.config import WormholeConfig, save_config
+from bot.config import MessageInfo, UserConfig, WormholeConfig, save_config
 from bot.utils.logging import setup_logging
+from bot.features.wormhole_economy import WormholeEconomy
 from bot.features.pretty_message import PrettyMessage
 from bot.features.user_management import UserManagement
 from bot.features.content_filtering import ContentFiltering
 from bot.features.role_management import RoleManagement
+from bot.features.proof_of_work import PoWHandler
+
+import discord
 import redis
 import json
 import asyncio
@@ -23,6 +28,8 @@ class DiscordBot(commands.Bot):
         self.content_filtering = ContentFiltering(config)
         self.role_management = RoleManagement(config)
         self.pretty_message = PrettyMessage(config)
+        self.wormhole_economy = WormholeEconomy(config)
+        self.pow_handler = PoWHandler(config, self.wormhole_economy)
         
         self.config_path = "config/config.json"
 
@@ -32,6 +39,38 @@ class DiscordBot(commands.Bot):
         self.logger.info("Extensions loaded successfully.")
         self.redis_listener_task = self.loop.create_task(self.listen_to_tox())
         self.save_config_loop.start()
+        self.add_listener(self.before_message, "on_message")
+        self.before_invoke(self.before_command)
+
+    async def before_message(self, message: discord.Message) -> None:
+        if message.author == self.user:
+            return
+        if self.user_management.is_user_banned(message.author.id):
+            return
+        success, result = await self.pow_handler.check_pow(message.content, message.author.id, message.channel.id)
+        if not success:
+            await message.channel.send(result)
+            return
+        if isinstance(result, list):
+            tasks = []
+            for notification in result:
+                tasks.append(message.channel.send(notification))
+            
+            await asyncio.gather(*tasks)
+
+    async def before_command(self, ctx: commands.Context) -> None:
+        if ctx.author == self.user:
+            return
+        if self.user_management.is_user_banned(ctx.author.id):
+            raise commands.CheckFailure()
+        success, result = await self.pow_handler.check_pow(ctx.message.content, ctx.author.id, ctx.channel.id)
+        if not success:
+            raise commands.CheckFailure()
+        if isinstance(result, list):  
+            tasks = []
+            for notification in result:
+                tasks.append(ctx.send(notification))
+            await asyncio.gather(*tasks)
 
     async def start(self) -> None:
         try:
@@ -76,9 +115,12 @@ class DiscordBot(commands.Bot):
         self.logger.info(f"Connected to {len(self.guilds)} guilds")
 
     async def on_command_error(self, ctx, error):
-        self.logger.error(f"Command error: {str(error)}")
-        self.logger.error(traceback.format_exc())
-        await ctx.send(f"An error occurred: {str(error)}")
+        if isinstance(error, commands.CheckFailure):
+            return
+        else:
+            self.logger.error(f"Command error: {str(error)}")
+            self.logger.error(traceback.format_exc())
+            await ctx.send(f"An error occurred: {str(error)}")
 
     async def listen_to_tox(self):
         self.logger.info("Starting Redis listener...")
@@ -114,6 +156,12 @@ class DiscordBot(commands.Bot):
     @save_config_loop.before_loop
     async def before_save_config_loop(self):
         await self.wait_until_ready()
+
+    @commands.command()
+    async def pow_status(self, ctx):
+        """Get the current PoW status for the user"""
+        status = self.pow_handler.get_pow_status(ctx.author.id)
+        await ctx.send(status)
 
     @commands.command()
     async def tox_add(self, ctx, tox_id: str):
