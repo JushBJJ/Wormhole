@@ -21,10 +21,8 @@ class EventHandlers(commands.Cog):
 
         if self.bot.user_management.is_user_banned(message.author.id):
             return
-
-        if not self.bot.content_filtering.is_content_allowed(message.content):
-            await message.delete()
-            await message.channel.send(f"{message.author.mention}, your message was removed due to inappropriate content.")
+        
+        if self.bot.config.get_user_config_by_id(message.author.id).can_send_message == False:
             return
 
         if str(message.channel.id) in self.bot.config.get_all_channel_ids():

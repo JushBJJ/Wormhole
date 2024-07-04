@@ -26,4 +26,8 @@ class UserManagement:
         return False
 
     def is_user_banned(self, user_id: int) -> bool:
-        return user_id in self.config.banned_users
+        try:
+            user_id = int(user_id)
+            return self.config.get_user_config_by_id(user_id).hash in self.config.banned_users
+        except ValueError:
+            return  user_id in self.config.banned_users

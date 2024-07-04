@@ -1,5 +1,6 @@
-import discord
+import asyncio
 from typing import List, Union
+import discord
 from discord.ext import commands
 from bot.config import ChannelConfig, WormholeConfig
 
@@ -66,7 +67,7 @@ class AdminCommands(commands.Cog):
     async def unban_user(self, ctx, user_id: int):
         """Unban a user from using the Wormhole bot"""
         user_hash = self.config.get_user_hash(ctx.message.author.id)
-        if user_id in self.config.banned_users:
+        if user_hash in self.config.banned_users:
             self.config.banned_users.remove(user_hash)
             await ctx.send(f"Unbanned user {user_hash}")
         else:
@@ -93,6 +94,45 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"{user_hash} is now a Wormhole Admin")
         else:
             await ctx.send(f"{user_hash} is already a Wormhole User")
+
+    @commands.command()
+    @is_wormhole_admin()
+    async def broadcast(self, ctx, channel_name: str, *, message: str):
+        """Broadcast a message to all channels concurrently"""
+        if channel_name not in self.config.channel_list:
+            await ctx.send(f"Channel {channel_name} does not exist")
+            return
+        
+        embed = discord.Embed(
+            title="Broadcast",
+            description=message,
+            color=discord.Color.red()
+        )
+        embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
+
+        async def send_to_channel(channel_id):
+            channel = self.bot.get_channel(int(channel_id))
+            if channel:
+                await channel.send(embed=embed)
+
+        tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
+        await asyncio.gather(*tasks)
+    
+    @commands.command()
+    @is_wormhole_admin()
+    async def raw_broadcast(self, ctx, channel_name: str, *, message: str):
+        """Broadcast a message to a specific channel"""
+        if channel_name not in self.config.channel_list:
+            await ctx.send(f"Channel {channel_name} does not exist")
+            return
+        
+        async def send_to_channel(channel_id):
+            channel = self.bot.get_channel(int(channel_id))
+            if channel:
+                await channel.send(message)
+        
+        tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
+        await asyncio.gather(*tasks)
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))

@@ -1,4 +1,7 @@
+import asyncio
 import hashlib
+import math
+import discord
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from functools import wraps
@@ -6,6 +9,7 @@ from functools import wraps
 import dotenv
 import json
 import os
+import time
 
 dotenv.load_dotenv()
 
@@ -41,11 +45,27 @@ class ChannelConfig(BaseModel):
             await message.remove_reaction('⏳', bot.user)
             await message.add_reaction('✅')
 
+class MessageInfo(BaseModel):
+    timestamp: float
+    hash: str
+
 class UserConfig(BaseModel):
     hash: str = ""
     role: str = "user"
     names: List[str] = []
     profile_picture: str = ""
+    message_history: List[MessageInfo] = Field(default_factory=list)
+    wormhole_coins: float = 0
+    difficulty: float = 0
+    can_send_message: bool = True
+    nonce: int = 0
+
+class WormholeEconomyConfig(BaseModel):
+    total_coin_supply: float = 1_000_000
+    coins_minted: float = 0
+    base_reward: float = 10
+    global_difficulty: float = 0
+    global_cost: float = 0
 
 class RoleConfig(BaseModel):
     color: str
@@ -64,8 +84,11 @@ class WormholeConfig(BaseModel):
     banned_users: List[str] = Field(default_factory=list)
     banned_words: List[str] = Field(default_factory=list)
     users: Dict[str, UserConfig] = Field(default_factory=dict)
+    economy: WormholeEconomyConfig = WormholeEconomyConfig()
     roles: Dict[str, RoleConfig] = Field(default_factory=dict)
     content_filter: ContentFilterConfig = ContentFilterConfig()
+    max_difficulty: int = 10
+    
     discord_token: str = os.getenv("token")
     global_salt: str = os.getenv("global_salt") or "else your cluster is compromised"
 
@@ -85,6 +108,12 @@ class WormholeConfig(BaseModel):
             if channel := channels.get(channel_id):
                 return channel
         return ChannelConfig()
+
+    def get_channel_name_by_id(self, channel_id: int) -> str:
+        for name, channels in self.channels.items():
+            if str(channel_id) in channels:
+                return name
+        return ""
 
     def get_all_channel_ids(self) -> list:
         return [id for channels in self.channels.values() for id in channels]
@@ -135,6 +164,115 @@ class WormholeConfig(BaseModel):
     def add_username(self, user_id: int, name: str) -> None:
         if name not in self.users[str(user_id)].names:
             self.users[str(user_id)].names.append(name)
+    
+    @auto_configure_user
+    def reset_user_bank(self, user_id: Union[str, int]) -> None:
+        try:
+            user_config = self.get_user_config_by_id(user_id)
+        except ValueError:
+            user_config = self.get_user_id_by_hash(user_id)
+        user_config.wormhole_coins = 0
+        user_config.nonce = 0
+        user_config.message_history = []
+        user_config.difficulty = 0
+
+    @auto_configure_user
+    def reset_user_difficulty(self, user_id: Union[str, int]) -> None:
+        try:
+            user_config = self.get_user_config_by_id(user_id)
+        except ValueError:
+            user_config = self.get_user_id_by_hash(user_id)
+        user_config.message_history = []
+        user_config.difficulty = 0
+    
+    def reset_economy(self) -> None:
+        self.economy.coins_minted = 0
+        self.economy.global_difficulty = 0
+        self.economy.global_cost = 0
+        
+        for user in self.users.values():
+            user.wormhole_coins = 0
+            user.nonce = 0
+            user.message_history = []
+            user.difficulty = 0
+    
+    def update_user_message_history(self, user_id: int, message_content: str):
+        user_config = self.users.get(str(user_id))
+        if user_config:
+            hashed_content = hashlib.sha256((self.global_salt+str(user_id)+message_content).encode()).hexdigest()
+            user_config.message_history.append(MessageInfo(timestamp=time.time(), hash=hashed_content))
+            if len(user_config.message_history) > 100: # Temporary
+                user_config.message_history.pop(0)
+
+    def calculate_user_difficulty(self, user_id: int) -> float:
+        short_term_window = 5 * 60    # 5 minutes
+        medium_term_window = 24 * 60 * 60  # 24 hours
+        long_term_window = 30 * 24 * 60 * 60  # 30 days
+        
+        short_term_threshold = 10
+        medium_term_threshold = 50
+        long_term_threshold = 500
+        
+        base_difficulty = 1.0
+        
+        user_id = str(user_id)
+        
+        user_config = self.users.get(user_id)
+        if not user_config:
+            print(f"User {user_id} not found")
+            return
+
+        current_time = time.time()
+        short_term_count = self._count_messages(user_id, current_time, short_term_window)
+        medium_term_count = self._count_messages(user_id, current_time, medium_term_window)
+        long_term_count = self._count_messages(user_id, current_time, long_term_window)
+
+        # Calculate difficulty factors
+        short_term_factor = math.pow(short_term_count / short_term_threshold, 2)
+        medium_term_factor = math.sqrt(medium_term_count / medium_term_threshold)
+        long_term_factor = math.log(long_term_count / long_term_threshold + 1) / math.log(2)
+
+        # Calculate weighted difficulty
+        difficulty = base_difficulty * (
+            0.6 * short_term_factor +
+            0.1 * medium_term_factor +
+            0.05 * long_term_factor
+        )
+
+        # Apply bonus for consistent long-term usage
+        if long_term_count > long_term_threshold and medium_term_count < medium_term_threshold:
+            long_term_bonus = 0.9
+            difficulty *= long_term_bonus
+
+        self.users[user_id].difficulty = difficulty
+
+        # Debug output
+        print(f"\nUser {user_id} difficulty: {difficulty:.2f}")
+        print(f"Short term: {short_term_count} messages in {short_term_window/60:.0f} minutes")
+        print(f"Medium term: {medium_term_count} messages in {medium_term_window/3600:.0f} hours")
+        print(f"Long term: {long_term_count} messages in {long_term_window/(24*3600):.0f} days")
+        print(f"Short term factor: {short_term_factor:.2f}")
+        print(f"Medium term factor: {medium_term_factor:.2f}")
+        print(f"Long term factor: {long_term_factor:.2f}")
+
+    def _count_messages(self, user_id: str, current_time: float, time_window: float) -> int:
+        return sum(1 for msg in self.users[user_id].message_history if current_time - msg.timestamp <= time_window)
+
+    def update_global_difficulty(self):
+        total_messages = sum(len(user.message_history) for user in self.users.values())
+        self.economy.global_difficulty = min(total_messages / 1000, 10)
+        print(f"Global difficulty: {self.economy.global_difficulty}")
+
+    async def broadcast(self, bot, channel_name: str, embed: Optional[discord.Embed] = None) -> list:
+        channels = self.get_all_channels_by_name(channel_name)
+        
+        async def send_message(channel_id):
+            channel = bot.get_channel(channel_id)
+            if channel:
+                await channel.send(embed=embed)
+        
+        tasks = [send_message(int(channel_id)) for channel_id in channels]
+        await asyncio.gather(*tasks)
 
 def load_config(config_path: str) -> WormholeConfig:
     with open(config_path, 'r') as f:
