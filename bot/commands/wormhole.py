@@ -8,16 +8,16 @@ class WormholeCommands(commands.Cog):
         self.bot = bot
         self.config: WormholeConfig = bot.config
 
-    @commands.command()
+    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def list_channels(self, ctx):
+    async def list_channels(self, ctx, **kwargs):
         """List all available Wormhole channels"""
         channels = "\n- ".join(self.config.channel_list)
         await ctx.send(f"Available Wormhole channels: {channels}")
 
-    @commands.command()
+    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def join(self, ctx, channel_name: str):
+    async def join(self, ctx, channel_name: str, **kwargs):
         """Join a Wormhole channel"""
         if channel_name in self.config.channel_list:
             if str(ctx.channel.id) not in self.config.channels[channel_name]:
@@ -28,9 +28,9 @@ class WormholeCommands(commands.Cog):
         else:
             await ctx.send(f"Channel {channel_name} does not exist")
 
-    @commands.command()
+    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def leave(self, ctx):
+    async def leave(self, ctx, **kwargs):
         """Leave the current Wormhole channel"""
         channel_list = self.config.channel_list
         for channel_name, channels in self.config.channels.items():
@@ -42,8 +42,8 @@ class WormholeCommands(commands.Cog):
                 await ctx.send(f"{channel_name} is a valid channel to leave.\nPlease say `%channel_list` to see the list of valid channels.")
         await ctx.send("This channel is not connected to any Wormhole channel")
     
-    @commands.command()
-    async def economy(self, ctx):
+    @commands.command(case_insensitive=True)
+    async def economy(self, ctx, **kwargs):
         """Display the current Wormhole economy"""
         result = f"Total coin supply: {self.config.economy.total_coin_supply}\n"\
                     f"Coins minted: {self.config.economy.coins_minted}\n"\
@@ -56,23 +56,23 @@ class WormholeCommands(commands.Cog):
                     f"Cost to send message: {self.config.economy.global_cost} wormhole coins"
         await ctx.send(result)
 
-    @commands.command()
+    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def reset_user_bank(self, ctx, user_id: Union[int, str]):
+    async def reset_user_bank(self, ctx, user_id: Union[int, str], **kwargs):
         """Reset the user's bank"""
         self.config.reset_user_bank(user_id)
         await ctx.send("User bank reset")
     
-    @commands.command()
+    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def reset_global_bank(self, ctx):
+    async def reset_global_bank(self, ctx, **kwargs):
         """Reset the global bank"""
         self.config.reset_economy()
         await ctx.send("Global bank reset")
     
-    @commands.command()
+    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def reset_user_difficulty(self, ctx, user_id: Union[int, str]):
+    async def reset_user_difficulty(self, ctx, user_id: Union[int, str], **kwargs):
         """Reset the user's difficulty"""
         self.config.reset_user_difficulty(user_id)
         await ctx.send("User difficulty reset")

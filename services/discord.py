@@ -9,6 +9,7 @@ from bot.features.user_management import UserManagement
 from bot.features.content_filtering import ContentFiltering
 from bot.features.role_management import RoleManagement
 from bot.features.proof_of_work import PoWHandler
+from bot.features.LLM.ollama import TogetherAIConfig, get_closest_command
 
 import discord
 import redis
@@ -29,7 +30,7 @@ class DiscordBot(commands.Bot):
         self.role_management = RoleManagement(config)
         self.pretty_message = PrettyMessage(config)
         self.wormhole_economy = WormholeEconomy(config)
-        self.pow_handler = PoWHandler(config, self.wormhole_economy)
+        self.pow_handler = PoWHandler(config, self.wormhole_economy, self)
         
         self.config_path = "config/config.json"
 
@@ -49,7 +50,6 @@ class DiscordBot(commands.Bot):
             return
         success, result = await self.pow_handler.check_pow(message.content, message.author.id, message.channel.id)
         if not success:
-            await message.channel.send(result)
             return
         if isinstance(result, list):
             tasks = []
@@ -120,7 +120,28 @@ class DiscordBot(commands.Bot):
         else:
             self.logger.error(f"Command error: {str(error)}")
             self.logger.error(traceback.format_exc())
-            await ctx.send(f"An error occurred: {str(error)}")
+            
+            response = await get_closest_command(
+                ctx.message.content,
+                self.config.get_user_config_by_id(ctx.author.id).role,
+                ctx.author.id,
+                self.all_commands
+            )
+            
+            #if not response.command_is_valid:
+            #    await ctx.send(f"An error occurred: {str(error)}")
+            #    return
+            
+            await ctx.send(
+                f"Command not found. Did you mean `%{response.closest_command}`?\n\n"\
+                f"Auto-executing command: `{response.auto_execute_command}`\n\n"
+                f"{response.response_to_user}\n\n"
+            )
+            
+            if response.auto_execute_command:
+                await ctx.invoke(self.all_commands[response.closest_command], **response.command_parameters)
+
+            print(response)
 
     async def listen_to_tox(self):
         self.logger.info("Starting Redis listener...")
@@ -157,28 +178,28 @@ class DiscordBot(commands.Bot):
     async def before_save_config_loop(self):
         await self.wait_until_ready()
 
-    @commands.command()
-    async def pow_status(self, ctx):
+    @commands.command(case_insensitive=True)
+    async def pow_status(self, ctx, **kwargs):
         """Get the current PoW status for the user"""
         status = self.pow_handler.get_pow_status(ctx.author.id)
         await ctx.send(status)
 
-    @commands.command()
-    async def tox_add(self, ctx, tox_id: str):
+    @commands.command(case_insensitive=True)
+    async def tox_add(self, ctx, tox_id: str, **kwargs):
         """Add a Tox ID to the node"""
         message = json.dumps({"message": f"COMMAND: ADD {tox_id}"})
         self.redis_client.publish('tox_node', message)
         await ctx.send(f"Adding Tox ID: {tox_id}")
 
-    @commands.command()
-    async def tox_list(self, ctx):
+    @commands.command(case_insensitive=True)
+    async def tox_list(self, ctx, **kwargs):
         """List all Tox IDs in the node"""
         message = json.dumps({"message": "COMMAND: LIST"})
         self.redis_client.publish('tox_node', message)
         await ctx.send("Retrieving Tox ID list...")
 
-    @commands.command()
-    async def tox_id(self, ctx):
+    @commands.command(case_insensitive=True)
+    async def tox_id(self, ctx, **kwargs):
         """Get the Tox ID of the node"""
         message = json.dumps({"message": "COMMAND: ID"})
         self.redis_client.publish('tox_node', message)
