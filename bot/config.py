@@ -138,6 +138,8 @@ class WormholeConfig(BaseModel):
 
     @auto_configure_user
     def get_user_hash(self, user_id: int) -> str:
+        if not isinstance(user_id, int):
+            return self.get_user_config_by_hash(user_id).hash
         return self.users[str(user_id)].hash
 
     def get_user_config_by_hash(self, user_hash: str) -> UserConfig:
@@ -205,9 +207,9 @@ class WormholeConfig(BaseModel):
                 user_config.message_history.pop(0)
 
     def calculate_user_difficulty(self, user_id: int) -> float:
-        short_term_window = 5 * 60    # 5 minutes
-        medium_term_window = 24 * 60 * 60  # 24 hours
-        long_term_window = 30 * 24 * 60 * 60  # 30 days
+        short_term_window = 5 * 60              # 5 minutes
+        medium_term_window = 24 * 60 * 60       # 24 hours
+        long_term_window = 30 * 24 * 60 * 60    # 30 days
         
         short_term_threshold = 10
         medium_term_threshold = 50
@@ -223,6 +225,7 @@ class WormholeConfig(BaseModel):
             return
 
         current_time = time.time()
+        # Count messages in each time window
         short_term_count = self._count_messages(user_id, current_time, short_term_window)
         medium_term_count = self._count_messages(user_id, current_time, medium_term_window)
         long_term_count = self._count_messages(user_id, current_time, long_term_window)
@@ -245,8 +248,6 @@ class WormholeConfig(BaseModel):
             difficulty *= long_term_bonus
 
         self.users[user_id].difficulty = difficulty
-
-        # Debug output
         print(f"\nUser {user_id} difficulty: {difficulty:.2f}")
         print(f"Short term: {short_term_count} messages in {short_term_window/60:.0f} minutes")
         print(f"Medium term: {medium_term_count} messages in {medium_term_window/3600:.0f} hours")

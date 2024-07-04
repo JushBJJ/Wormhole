@@ -9,13 +9,13 @@ class GeneralCommands(commands.Cog):
         self.bot = bot
         self.config = bot.config
 
-    @commands.command()
-    async def ping(self, ctx):
+    @commands.command(case_insensitive=True)
+    async def ping(self, ctx, **kwargs):
         """Check if the bot is responsive"""
         await ctx.send("Pong!")
 
     @commands.command(name="help")
-    async def help(self, ctx, module: str = None):
+    async def help(self, ctx, module: str = None, **kwargs):
         """Display help information"""
         if module:
             await self.show_module_help(ctx, module)
@@ -61,8 +61,8 @@ class GeneralCommands(commands.Cog):
 
         await ctx.send(help_text)
 
-    @commands.command()
-    async def info(self, ctx):
+    @commands.command(case_insensitive=True)
+    async def info(self, ctx, **kwargs):
         """Display information about the Wormhole bot"""
         info_text = (
             "Wormhole Bot\n"
@@ -74,8 +74,8 @@ class GeneralCommands(commands.Cog):
         )
         await ctx.send(info_text)
 
-    @commands.command()
-    async def get_user(self, ctx, user_identifier: Union[str, int]):
+    @commands.command(case_insensitive=True)
+    async def get_user(self, ctx, user_identifier: Union[str, int], **kwargs):
         try:
             try:
                 user_id = int(user_identifier)

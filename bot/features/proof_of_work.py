@@ -1,6 +1,7 @@
 from typing import Tuple, Union
 
 import discord
+from discord.ext import commands
 from bot.config import MessageInfo, UserConfig, WormholeConfig
 from bot.features.wormhole_economy import WormholeEconomy
 
@@ -8,9 +9,10 @@ import hashlib
 import time
 
 class PoWHandler:
-    def __init__(self, config: WormholeConfig, wormhole_economy: WormholeEconomy):
+    def __init__(self, config: WormholeConfig, wormhole_economy: WormholeEconomy, ctx: commands.Bot):
         self.config = config
         self.wormhole_economy = wormhole_economy
+        self.ctx = ctx
 
     async def check_pow(self, message_content: str, user_id: int, channel_id: int) -> Tuple[bool, str]:
         user_config: UserConfig = self.config.get_user_config_by_id(user_id)
@@ -50,7 +52,7 @@ class PoWHandler:
             notifications.append(embed)
 
         if before_user_difficulty != int(user_config.difficulty):
-            user = self.get_user(user_id)
+            user = self.ctx.get_user(user_id)
             embed = discord.Embed(
                     title = "User difficulty change",
                     description= f"User difficulty has changed to `{user_config.difficulty}`\n\n"
