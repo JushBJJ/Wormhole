@@ -49,23 +49,20 @@ class MessageInfo(BaseModel):
     timestamp: float
     hash: str
 
+class tempMessageInfo(BaseModel):
+    role: str
+    content: str
+
 class UserConfig(BaseModel):
     hash: str = ""
     role: str = "user"
     names: List[str] = []
     profile_picture: str = ""
     message_history: List[MessageInfo] = Field(default_factory=list)
-    wormhole_coins: float = 0
+    temp_command_message_history: List[tempMessageInfo] = Field(default_factory=list)
     difficulty: float = 0
     can_send_message: bool = True
     nonce: int = 0
-
-class WormholeEconomyConfig(BaseModel):
-    total_coin_supply: float = 1_000_000
-    coins_minted: float = 0
-    base_reward: float = 10
-    global_difficulty: float = 0
-    global_cost: float = 0
 
 class RoleConfig(BaseModel):
     color: str
@@ -84,7 +81,6 @@ class WormholeConfig(BaseModel):
     banned_users: List[str] = Field(default_factory=list)
     banned_words: List[str] = Field(default_factory=list)
     users: Dict[str, UserConfig] = Field(default_factory=dict)
-    economy: WormholeEconomyConfig = WormholeEconomyConfig()
     roles: Dict[str, RoleConfig] = Field(default_factory=dict)
     content_filter: ContentFilterConfig = ContentFilterConfig()
     max_difficulty: int = 10
@@ -166,17 +162,6 @@ class WormholeConfig(BaseModel):
     def add_username(self, user_id: int, name: str) -> None:
         if name not in self.users[str(user_id)].names:
             self.users[str(user_id)].names.append(name)
-    
-    @auto_configure_user
-    def reset_user_bank(self, user_id: Union[str, int]) -> None:
-        try:
-            user_config = self.get_user_config_by_id(user_id)
-        except ValueError:
-            user_config = self.get_user_id_by_hash(user_id)
-        user_config.wormhole_coins = 0
-        user_config.nonce = 0
-        user_config.message_history = []
-        user_config.difficulty = 0
 
     @auto_configure_user
     def reset_user_difficulty(self, user_id: Union[str, int]) -> None:
@@ -186,17 +171,6 @@ class WormholeConfig(BaseModel):
             user_config = self.get_user_id_by_hash(user_id)
         user_config.message_history = []
         user_config.difficulty = 0
-    
-    def reset_economy(self) -> None:
-        self.economy.coins_minted = 0
-        self.economy.global_difficulty = 0
-        self.economy.global_cost = 0
-        
-        for user in self.users.values():
-            user.wormhole_coins = 0
-            user.nonce = 0
-            user.message_history = []
-            user.difficulty = 0
     
     def update_user_message_history(self, user_id: int, message_content: str):
         user_config = self.users.get(str(user_id))
@@ -258,11 +232,6 @@ class WormholeConfig(BaseModel):
 
     def _count_messages(self, user_id: str, current_time: float, time_window: float) -> int:
         return sum(1 for msg in self.users[user_id].message_history if current_time - msg.timestamp <= time_window)
-
-    def update_global_difficulty(self):
-        total_messages = sum(len(user.message_history) for user in self.users.values())
-        self.economy.global_difficulty = min(total_messages / 1000, 10)
-        print(f"Global difficulty: {self.economy.global_difficulty}")
 
     async def broadcast(self, bot, channel_name: str, embed: Optional[discord.Embed] = None) -> list:
         channels = self.get_all_channels_by_name(channel_name)

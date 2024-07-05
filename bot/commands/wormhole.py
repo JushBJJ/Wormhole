@@ -1,4 +1,5 @@
-from typing import Union
+from typing import Optional, Union
+from discord import NotFound
 from discord.ext import commands
 from bot.config import WormholeConfig, ChannelConfig
 from bot.commands.admin import is_wormhole_admin
@@ -43,39 +44,26 @@ class WormholeCommands(commands.Cog):
         await ctx.send("This channel is not connected to any Wormhole channel")
     
     @commands.command(case_insensitive=True)
-    async def economy(self, ctx, **kwargs):
-        """Display the current Wormhole economy"""
-        result = f"Total coin supply: {self.config.economy.total_coin_supply}\n"\
-                    f"Coins minted: {self.config.economy.coins_minted}\n"\
-                    f"Base reward: {self.config.economy.base_reward}\n"\
-                    f"Global difficulty: {self.config.economy.global_difficulty}\n"\
-                    f"Remaining coins: {self.config.economy.total_coin_supply - self.config.economy.coins_minted}\n"\
-                    f"Your coins: {self.config.users[str(ctx.author.id)].wormhole_coins}\n"\
-                    f"Your difficulty: {self.config.users[str(ctx.author.id)].difficulty}\n" \
-                    f"Your nonce: {self.config.users[str(ctx.author.id)].nonce}\n"\
-                    f"Cost to send message: {self.config.economy.global_cost} wormhole coins"
-        await ctx.send(result)
-
-    @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def reset_user_bank(self, ctx, user_id: Union[int, str], **kwargs):
-        """Reset the user's bank"""
-        self.config.reset_user_bank(user_id)
-        await ctx.send("User bank reset")
-    
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def reset_global_bank(self, ctx, **kwargs):
-        """Reset the global bank"""
-        self.config.reset_economy()
-        await ctx.send("Global bank reset")
-    
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def reset_user_difficulty(self, ctx, user_id: Union[int, str], **kwargs):
+    async def reset_user_difficulty(self, ctx, user_id_or_hash: Optional[Union[int, str]] = None, **kwargs):
         """Reset the user's difficulty"""
-        self.config.reset_user_difficulty(user_id)
+        if user_id_or_hash is None:
+            user_id_or_hash = ctx.author.id
+        self.config.reset_user_difficulty(user_id_or_hash)
         await ctx.send("User difficulty reset")
+    
+    @commands.command(case_insensitive=True)
+    async def pow_status(self, ctx, user_id_or_hash: Optional[Union[int, str]] = None, **kwargs):
+        """Get the current PoW status for the user"""
+        if user_id_or_hash is None:
+            user_id_or_hash = ctx.author.id
+        
+        try:
+            user_id_or_hash = int(user_id_or_hash)
+        except ValueError:
+            user_id_or_hash = self.config.get_user_id_by_hash(user_id_or_hash)
+        status = self.bot.pow_handler.get_pow_status(user_id_or_hash)
+        await ctx.send(status)
 
 async def setup(bot):
     await bot.add_cog(WormholeCommands(bot))

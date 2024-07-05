@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Union
+from typing import List, Union, Optional
 import discord
 from discord.ext import commands
 from bot.config import ChannelConfig, WormholeConfig
@@ -53,11 +53,11 @@ class AdminCommands(commands.Cog):
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def ban_user(self, ctx, user_id_or_hash: str, **kwargs):
+    async def ban_user(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
         """Ban a user from using the Wormhole bot"""
         try:
             user_id_or_hash = int(user_id_or_hash)
-        finally:
+        except ValueError:
             user_hash = self.config.get_user_hash(user_id_or_hash)
             if user_hash not in self.config.banned_users:
                 self.config.banned_users.append(user_hash)
@@ -67,10 +67,12 @@ class AdminCommands(commands.Cog):
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def unban_user(self, ctx, user_id_or_hash: str, **kwargs):
+    async def unban_user(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
         """Unban a user from using the Wormhole bot"""
         try:
             user_id_or_hash = int(user_id_or_hash)
+        except ValueError:
+            pass
         finally:
             user_hash = self.config.get_user_hash(user_id_or_hash)
             if user_hash in self.config.banned_users:
@@ -81,10 +83,11 @@ class AdminCommands(commands.Cog):
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def admin(self, ctx, user_hash: str, **kwargs):
+    async def admin(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
         """Add a new admin to the wormhole bot"""
+        user_hash = self.config.get_user_hash(user_id_or_hash)
         user = self.config.get_user_config_by_hash(user_hash)
-        if user.role!="admin":
+        if user.role != "admin":
             self.config.change_user_role(user_hash, "admin")
             await ctx.send(f"{user_hash} is now a Wormhole Admin")
         else:
@@ -92,12 +95,13 @@ class AdminCommands(commands.Cog):
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
-    async def unadmin(self, ctx, user_hash: str, **kwargs):
-        """Add a new admin to the wormhole bot"""
+    async def unadmin(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
+        """Remove admin status from a user"""
+        user_hash = self.config.get_user_hash(user_id_or_hash)
         user = self.config.get_user_config_by_hash(user_hash)
-        if user.role!="user":
+        if user.role != "user":
             self.config.change_user_role(user_hash, "user")
-            await ctx.send(f"{user_hash} is now a Wormhole Admin")
+            await ctx.send(f"{user_hash} is no longer a Wormhole Admin")
         else:
             await ctx.send(f"{user_hash} is already a Wormhole User")
 
