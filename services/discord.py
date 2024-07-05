@@ -1,15 +1,15 @@
 import time
 from typing import Union
 from discord.ext import commands, tasks
-from bot.config import MessageInfo, UserConfig, WormholeConfig, save_config
+from bot.config import MessageInfo, UserConfig, WormholeConfig, save_config, tempMessageInfo
 from bot.utils.logging import setup_logging
-from bot.features.wormhole_economy import WormholeEconomy
 from bot.features.pretty_message import PrettyMessage
 from bot.features.user_management import UserManagement
 from bot.features.content_filtering import ContentFiltering
 from bot.features.role_management import RoleManagement
 from bot.features.proof_of_work import PoWHandler
-from bot.features.LLM.ollama import TogetherAIConfig, get_closest_command
+from bot.features.LLM.ollama import AnyscaleConfig, get_closest_command
+from bot.features.embed import create_embed
 
 import discord
 import redis
@@ -29,8 +29,7 @@ class DiscordBot(commands.Bot):
         self.content_filtering = ContentFiltering(config)
         self.role_management = RoleManagement(config)
         self.pretty_message = PrettyMessage(config)
-        self.wormhole_economy = WormholeEconomy(config)
-        self.pow_handler = PoWHandler(config, self.wormhole_economy, self)
+        self.pow_handler = PoWHandler(config, self)
         
         self.config_path = "config/config.json"
 
@@ -54,7 +53,7 @@ class DiscordBot(commands.Bot):
         if isinstance(result, list):
             tasks = []
             for notification in result:
-                tasks.append(message.channel.send(notification))
+                tasks.append(message.channel.send(embed=notification))
             
             await asyncio.gather(*tasks)
 
@@ -65,11 +64,11 @@ class DiscordBot(commands.Bot):
             raise commands.CheckFailure()
         success, result = await self.pow_handler.check_pow(ctx.message.content, ctx.author.id, ctx.channel.id)
         if not success:
-            raise commands.CheckFailure()
+            return # User failed PoW check
         if isinstance(result, list):  
             tasks = []
             for notification in result:
-                tasks.append(ctx.send(notification))
+                tasks.append(ctx.send(embed=notification))
             await asyncio.gather(*tasks)
 
     async def start(self) -> None:
@@ -120,25 +119,49 @@ class DiscordBot(commands.Bot):
         else:
             self.logger.error(f"Command error: {str(error)}")
             self.logger.error(traceback.format_exc())
+            user_config = self.config.get_user_config_by_id(ctx.author.id)
+            
+            if user_config.difficulty > 1:
+                embed = create_embed(decsription=f"Error: `{str(error)}`")
+                await ctx.send(embed=embed)
             
             response = await get_closest_command(
-                ctx.message.content,
-                self.config.get_user_config_by_id(ctx.author.id).role,
-                ctx.author.id,
-                self.all_commands
+                user_input = ctx.message.content,
+                user_role = self.config.get_user_config_by_id(ctx.author.id).role,
+                user_id = ctx.author.id,
+                commands = self.all_commands,
+                messages = [{"role": msg.role, "content": msg.content} for msg in user_config.temp_command_message_history]
             )
             
-            #if not response.command_is_valid:
-            #    await ctx.send(f"An error occurred: {str(error)}")
-            #    return
+            user_config.temp_command_message_history.append(tempMessageInfo(role="user", content=ctx.message.content))
+            user_config.temp_command_message_history.append(tempMessageInfo(role="assistant", content=f"{response.reasoning}"))
+            
+            if len(user_config.temp_command_message_history) > 5:
+                user_config.temp_command_message_history.pop(0)
+            
+            if not response.command_exists:
+                return
+            
+            description = f"Error: `{str(error)}`\n\n"\
+                            f"Did you mean `{response.closest_command}`?\n\n"\
+            
+            if response.should_execute_command > 0.5:
+                description += f"Auto-executing command: `Yes`\n"
+                description += f"Full command: `%{response.closest_command} {' '.join(list(response.command_parameters.values()))}`"
+            else:
+                params = self.all_commands[response.closest_command].params
+                params = [f"`{key}` - `{value.annotation}`" for key, value in params.items() if key != "kwargs"]
+                params_str = "\n".join(params)
+                description += f"Command Parameters:\n{params_str}"
             
             await ctx.send(
-                f"Command not found. Did you mean `%{response.closest_command}`?\n\n"\
-                f"Auto-executing command: `{response.auto_execute_command}`\n\n"
-                f"{response.response_to_user}\n\n"
+                embed=create_embed(
+                    title="Command Error",
+                    description=description
+                )
             )
             
-            if response.auto_execute_command:
+            if response.should_execute_command > 0.5:
                 await ctx.invoke(self.all_commands[response.closest_command], **response.command_parameters)
 
             print(response)
@@ -177,12 +200,6 @@ class DiscordBot(commands.Bot):
     @save_config_loop.before_loop
     async def before_save_config_loop(self):
         await self.wait_until_ready()
-
-    @commands.command(case_insensitive=True)
-    async def pow_status(self, ctx, **kwargs):
-        """Get the current PoW status for the user"""
-        status = self.pow_handler.get_pow_status(ctx.author.id)
-        await ctx.send(status)
 
     @commands.command(case_insensitive=True)
     async def tox_add(self, ctx, tox_id: str, **kwargs):

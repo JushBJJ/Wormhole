@@ -1,7 +1,6 @@
 from collections import defaultdict
 import discord
-
-from typing import Union
+from typing import Union, Optional
 from discord.ext import commands
 
 class GeneralCommands(commands.Cog):
@@ -75,17 +74,22 @@ class GeneralCommands(commands.Cog):
         await ctx.send(info_text)
 
     @commands.command(case_insensitive=True)
-    async def get_user(self, ctx, user_identifier: Union[str, int], **kwargs):
+    async def get_user(self, ctx, user_id_or_hash: Optional[Union[str, int]] = None, **kwargs):
+        """Get user information by ID or hash"""
+        if user_id_or_hash is None:
+            user_id_or_hash = ctx.author.id
+
         try:
             try:
-                user_id = int(user_identifier)
+                user_id = int(user_id_or_hash)
                 user_config = self.config.get_user_config_by_id(user_id)
                 send_method = ctx.author.send
                 
                 if self.config.get_user_role(ctx.author.id) != "admin" and ctx.author.id != user_id:
                     await ctx.send("You must be a Wormhole admin to view user information by ID.")
+                    return
             except ValueError:
-                user_config = self.config.get_user_config_by_hash(user_identifier)
+                user_config = self.config.get_user_config_by_hash(user_id_or_hash)
                 send_method = ctx.send
 
             embed = self.create_user_embed(user_config)
