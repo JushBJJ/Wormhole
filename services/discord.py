@@ -122,7 +122,7 @@ class DiscordBot(commands.Bot):
             user_config = self.config.get_user_config_by_id(ctx.author.id)
             
             if user_config.difficulty > 1:
-                embed = create_embed(decsription=f"Error: `{str(error)}`")
+                embed = create_embed(description=f"Error: `{str(error)}`")
                 await ctx.send(embed=embed)
             
             response = await get_closest_command(
@@ -132,24 +132,43 @@ class DiscordBot(commands.Bot):
                 commands = self.all_commands,
                 messages = [{"role": msg.role, "content": msg.content} for msg in user_config.temp_command_message_history]
             )
+            user_config.temp_command_message_history.append(tempMessageInfo(role="user", content=ctx.message.content))            
+            user_config.temp_command_message_history.append(tempMessageInfo(role="bot", content=response.response_to_user))
             
-            user_config.temp_command_message_history.append(tempMessageInfo(role="user", content=ctx.message.content))
-            user_config.temp_command_message_history.append(tempMessageInfo(role="assistant", content=f"{response.reasoning}"))
-            
-            if len(user_config.temp_command_message_history) > 5:
+            if len(user_config.temp_command_message_history) > 10:
                 user_config.temp_command_message_history.pop(0)
             
-            if not response.command_exists:
+            if response.moderation.ban_probability > 7:
+                user_hash = self.config.get_user_hash(ctx.author.id)
+                if user_hash not in self.config.banned_users:
+                    self.config.banned_users.append(user_hash)
+                    await ctx.send("You have been banned for abusing the bot.")
                 return
-            
+            elif response.moderation.abuse_probability >= 6:
+                user_config.difficulty_penalty += 0.5
+                await ctx.send("Your difficulty penalty has been increased by 0.1 due to abusing the bot.")
+                return
+            elif response.moderation.spam_probability >= 6 or response.moderation.useless_probability >= 6:
+                user_config.difficulty_penalty += 1
+                await ctx.send("Your difficulty penalty has been increased by 0.5 due to spamming the bot.")
+                return
+            elif response.matched_command.name == "":
+                await ctx.send(
+                    embed=create_embed(
+                        title="Command Error",
+                        description=f"{response.response_to_user}"
+                    )
+                )
+                return
+
             description = f"Error: `{str(error)}`\n\n"\
-                            f"Did you mean `{response.closest_command}`?\n\n"\
+                            f"Did you mean `{response.matched_command.name}`?\n\n"\
             
-            if response.should_execute_command > 0.5:
+            if response.match_probability > 7:
                 description += f"Auto-executing command: `Yes`\n"
-                description += f"Full command: `%{response.closest_command} {' '.join(list(response.command_parameters.values()))}`"
+                description += f"Full command: `%{response.matched_command.name} {' '.join(response.matched_command_parameters)}`"
             else:
-                params = self.all_commands[response.closest_command].params
+                params = self.all_commands[response.matched_command.name].params
                 params = [f"`{key}` - `{value.annotation}`" for key, value in params.items() if key != "kwargs"]
                 params_str = "\n".join(params)
                 description += f"Command Parameters:\n{params_str}"
@@ -161,8 +180,8 @@ class DiscordBot(commands.Bot):
                 )
             )
             
-            if response.should_execute_command > 0.5:
-                await ctx.invoke(self.all_commands[response.closest_command], **response.command_parameters)
+            if response.match_probability > 7:
+                await ctx.invoke(self.all_commands[response.matched_command.name], *response.matched_command_parameters)
 
             print(response)
 

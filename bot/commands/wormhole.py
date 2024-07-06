@@ -20,14 +20,20 @@ class WormholeCommands(commands.Cog):
     @is_wormhole_admin()
     async def join(self, ctx, channel_name: str, **kwargs):
         """Join a Wormhole channel"""
-        if channel_name in self.config.channel_list:
-            if str(ctx.channel.id) not in self.config.channels[channel_name]:
-                self.config.channels[channel_name][str(ctx.channel.id)] = ChannelConfig()
-                await ctx.send(f"Joined Wormhole channel: {channel_name}")
+        if self.config.get_channel_name_by_id(ctx.channel.id)=="":
+            if channel_name in self.config.channel_list:
+                if str(ctx.channel.id) not in self.config.channels[channel_name]:
+                    self.config.channels[channel_name][str(ctx.channel.id)] = ChannelConfig()
+                    await ctx.send(f"Joined Wormhole channel: {channel_name}")
+                else:
+                    await ctx.send(f"This channel is already connected to {channel_name}")
             else:
-                await ctx.send(f"This channel is already connected to {channel_name}")
+                await ctx.send(f"Channel {channel_name} does not exist")
         else:
-            await ctx.send(f"Channel {channel_name} does not exist")
+            await ctx.send(
+                f"This channel is already connected to {self.config.get_channel_name_by_id(ctx.channel.id)}"
+                f"\nPlease say `%leave` to leave the current channel"
+            )
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
@@ -40,7 +46,7 @@ class WormholeCommands(commands.Cog):
                 await ctx.send(f"Left Wormhole channel: {channel_name}")
                 return
             elif channel_name not in channel_list:
-                await ctx.send(f"{channel_name} is a valid channel to leave.\nPlease say `%channel_list` to see the list of valid channels.")
+                await ctx.send(f"{channel_name} is not a valid channel to leave.\nPlease say `%channel_list` to see the list of valid channels.")
         await ctx.send("This channel is not connected to any Wormhole channel")
     
     @commands.command(case_insensitive=True)

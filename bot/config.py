@@ -61,6 +61,7 @@ class UserConfig(BaseModel):
     message_history: List[MessageInfo] = Field(default_factory=list)
     temp_command_message_history: List[tempMessageInfo] = Field(default_factory=list)
     difficulty: float = 0
+    difficulty_penalty: float = 0
     can_send_message: bool = True
     nonce: int = 0
 
@@ -221,7 +222,8 @@ class WormholeConfig(BaseModel):
             long_term_bonus = 0.9
             difficulty *= long_term_bonus
 
-        self.users[user_id].difficulty = difficulty
+        penalty = user_config.difficulty_penalty
+        self.users[user_id].difficulty = difficulty + penalty
         print(f"\nUser {user_id} difficulty: {difficulty:.2f}")
         print(f"Short term: {short_term_count} messages in {short_term_window/60:.0f} minutes")
         print(f"Medium term: {medium_term_count} messages in {medium_term_window/3600:.0f} hours")
