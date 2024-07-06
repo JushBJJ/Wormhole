@@ -55,31 +55,23 @@ class AdminCommands(commands.Cog):
     @is_wormhole_admin()
     async def ban_user(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
         """Ban a user from using the Wormhole bot"""
-        try:
-            user_id_or_hash = int(user_id_or_hash)
-        except ValueError:
-            user_hash = self.config.get_user_hash(user_id_or_hash)
-            if user_hash not in self.config.banned_users:
-                self.config.banned_users.append(user_hash)
-                await ctx.send(f"Banned user `{user_hash}`")
-            else:
-                await ctx.send(f"User `{user_hash}` is already banned")
+        user_hash = self.config.get_user_hash(user_id_or_hash)
+        if user_hash not in self.config.banned_users:
+            self.config.banned_users.append(user_hash)
+            await ctx.send(f"Banned user `{user_hash}`")
+        else:
+            await ctx.send(f"User `{user_hash}` is already banned")
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
     async def unban_user(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
         """Unban a user from using the Wormhole bot"""
-        try:
-            user_id_or_hash = int(user_id_or_hash)
-        except ValueError:
-            pass
-        finally:
-            user_hash = self.config.get_user_hash(user_id_or_hash)
-            if user_hash in self.config.banned_users:
-                self.config.banned_users.remove(user_hash)
-                await ctx.send(f"Unbanned user `{user_hash}`")
-            else:
-                await ctx.send(f"User `{user_hash}` is not banned")
+        user_hash = self.config.get_user_hash(user_id_or_hash)
+        if user_hash in self.config.banned_users:
+            self.config.banned_users.remove(user_hash)
+            await ctx.send(f"Unbanned user `{user_hash}`")
+        else:
+            await ctx.send(f"User `{user_hash}` is not banned")
 
     @commands.command(case_insensitive=True)
     @is_wormhole_admin()
