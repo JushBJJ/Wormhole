@@ -152,6 +152,10 @@ class WormholeConfig(BaseModel):
         return next((int(user_id) for user_id, user in self.users.items() if user.hash == user_hash), 0)
 
     @auto_configure_user
+    def reset_user_penalty(self, user_id: int) -> None:
+        self.users[str(user_id)].difficulty_penalty = 0
+
+    @auto_configure_user
     def get_user_role(self, user_id: int) -> str:
         return self.users[str(user_id)].role
 

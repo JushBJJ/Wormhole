@@ -134,6 +134,15 @@ class AdminCommands(commands.Cog):
         
         tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
         await asyncio.gather(*tasks)
+    
+    @commands.command(case_insensitive=True)
+    @is_wormhole_admin()
+    async def reset_user_penalty(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
+        """Reset the user's penalty"""
+        if user_id_or_hash is None:
+            user_id_or_hash = self.config.get_user_hash(ctx.author.id)
+        self.config.reset_user_penalty(user_id_or_hash)
+        await ctx.send("User penalty reset")
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))
