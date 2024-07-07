@@ -19,7 +19,6 @@ def is_wormhole_admin():
             await ctx.send("You must be a Wormhole admin to run this command.")
             return False
         except Exception as e:
-            print(f"Error in is_wormhole_admin check: {e}")
             return False
 
     return commands.check(predicate)

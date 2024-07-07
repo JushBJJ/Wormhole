@@ -14,7 +14,7 @@ T = TypeVar('T', bound=BaseModel)
 
 
 class OllamaConfig(BaseModel):
-    base_url: str = "http://localhost:11434/v1"
+    base_url: str = os.getenv("OLLAMA_BASE_URL", "")
     api_key: str = "yo mama so fat she can't even fit in the API key field"
     mode: instructor.Mode = instructor.Mode.JSON_SCHEMA
     default_model: str = "llama3:8b-instruct-q6_K"
@@ -46,7 +46,6 @@ class OllamaLLM:
             messages=messages,
             response_model=response_schema
         )
-        print(response)
         return response
     
 class moderation_schema(BaseModel):

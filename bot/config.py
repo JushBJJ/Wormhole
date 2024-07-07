@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+from logging import Logger
 import math
 import discord
 from pydantic import BaseModel, Field
@@ -10,6 +11,8 @@ import dotenv
 import json
 import os
 import time
+
+from bot.utils.logging import setup_logging
 
 dotenv.load_dotenv()
 
@@ -86,8 +89,8 @@ class WormholeConfig(BaseModel):
     content_filter: ContentFilterConfig = ContentFilterConfig()
     max_difficulty: int = 10
     
-    discord_token: str = os.getenv("token")
-    global_salt: str = os.getenv("global_salt") or "else your cluster is compromised"
+    discord_token: str = Field(default_factory=lambda: os.getenv("token"))
+    global_salt: str = Field(default_factory=lambda: os.getenv("global_salt") or "else your cluster is compromised")
 
     class Config:
         extra = "allow"
@@ -196,7 +199,7 @@ class WormholeConfig(BaseModel):
         
         user_config = self.users.get(user_id)
         if not user_config:
-            print(f"User {user_id} not found")
+            self.logger.warning(f"User {user_id} not found")
             return
 
         current_time = time.time()
@@ -224,13 +227,13 @@ class WormholeConfig(BaseModel):
 
         penalty = user_config.difficulty_penalty
         self.users[user_id].difficulty = difficulty + penalty
-        print(f"\nUser {user_id} difficulty: {difficulty:.2f}")
-        print(f"Short term: {short_term_count} messages in {short_term_window/60:.0f} minutes")
-        print(f"Medium term: {medium_term_count} messages in {medium_term_window/3600:.0f} hours")
-        print(f"Long term: {long_term_count} messages in {long_term_window/(24*3600):.0f} days")
-        print(f"Short term factor: {short_term_factor:.2f}")
-        print(f"Medium term factor: {medium_term_factor:.2f}")
-        print(f"Long term factor: {long_term_factor:.2f}")
+        self.logger.info(f"\nUser {user_id} difficulty: {difficulty:.2f}")
+        self.logger.info(f"Short term: {short_term_count} messages in {short_term_window/60:.0f} minutes")
+        self.logger.info(f"Medium term: {medium_term_count} messages in {medium_term_window/3600:.0f} hours")
+        self.logger.info(f"Long term: {long_term_count} messages in {long_term_window/(24*3600):.0f} days")
+        self.logger.info(f"Short term factor: {short_term_factor:.2f}")
+        self.logger.info(f"Medium term factor: {medium_term_factor:.2f}")
+        self.logger.info(f"Long term factor: {long_term_factor:.2f}")
 
     def _count_messages(self, user_id: str, current_time: float, time_window: float) -> int:
         return sum(1 for msg in self.users[user_id].message_history if current_time - msg.timestamp <= time_window)
@@ -253,7 +256,8 @@ def load_config(config_path: str) -> WormholeConfig:
 
 def save_config(config_path: str, config: WormholeConfig):
     with open(config_path, 'w') as f:
-        json.dump(config.dict(), f, indent=4)
+        config_dict = config.dict(exclude={"logger", "discord_token", "global_salt"})
+        json.dump(config_dict, f, indent=4)
 
 def compute_user_hash(config: WormholeConfig, user_id: int) -> str:
     return hashlib.sha256(f"{config.global_salt}{user_id}".encode()).hexdigest()

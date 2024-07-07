@@ -2,7 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 
-def setup_logging(log_file: str = 'logs/wormhole.log', log_level: int = logging.INFO):
+def setup_logging(log_file: str = os.getenv('LOG_PATH','logs/wormhole.log'), log_level: int = logging.INFO):
     logger = logging.getLogger('wormhole')
     logger.setLevel(log_level)
 

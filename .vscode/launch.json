@@ -21,20 +21,19 @@
             "justMyCode": false
         },
         {
-            "name": "Telegram Bot",
+            "name": "Discord Bot Docker: Attach",
             "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/run_telegram.py",
-            "console": "integratedTerminal",
-            "justMyCode": false
-        },
-        {
-            "name": "Signal Bot",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/run_signal.py",
-            "console": "integratedTerminal",
-            "justMyCode": false
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/app"
+                }
+            ]
         }
     ]
 }

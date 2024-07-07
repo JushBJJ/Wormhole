@@ -1,4 +1,3 @@
-import time
 from typing import Union
 from discord.ext import commands, tasks
 from bot.config import MessageInfo, UserConfig, WormholeConfig, save_config, tempMessageInfo
@@ -12,6 +11,7 @@ from bot.features.LLM.ollama import AnyscaleConfig, get_closest_command
 from bot.features.embed import create_embed
 
 import discord
+import os
 import redis
 import json
 import asyncio
@@ -23,7 +23,8 @@ class DiscordBot(commands.Bot):
         super().__init__(command_prefix="%", intents=intents, help_command=None)
         self.config = config
         self.logger = setup_logging()
-        self.redis_client = redis.Redis(host='localhost', port=6379, db=0)
+        self.config.logger = self.logger
+        #self.redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
         self.user_management = UserManagement(config)
         self.content_filtering = ContentFiltering(config)
@@ -31,13 +32,13 @@ class DiscordBot(commands.Bot):
         self.pretty_message = PrettyMessage(config)
         self.pow_handler = PoWHandler(config, self)
         
-        self.config_path = "config/config.json"
+        self.config_path = os.getenv("CONFIG_PATH", "config/config.json")
 
     async def setup_hook(self) -> None:
         self.logger.info("Setting up bot...")
         await self.load_extensions()
         self.logger.info("Extensions loaded successfully.")
-        self.redis_listener_task = self.loop.create_task(self.listen_to_tox())
+        #self.redis_listener_task = self.loop.create_task(self.listen_to_tox())
         self.save_config_loop.start()
         self.add_listener(self.before_message, "on_message")
         self.before_invoke(self.before_command)
@@ -183,7 +184,7 @@ class DiscordBot(commands.Bot):
             if response.match_probability > 7:
                 await ctx.invoke(self.all_commands[response.matched_command.name], *response.matched_command_parameters)
 
-            print(response)
+            self.logger.info(response)
 
     async def listen_to_tox(self):
         self.logger.info("Starting Redis listener...")
