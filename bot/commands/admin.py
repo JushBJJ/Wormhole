@@ -140,7 +140,12 @@ class AdminCommands(commands.Cog):
     async def reset_user_penalty(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
         """Reset the user's penalty"""
         if user_id_or_hash is None:
-            user_id_or_hash = self.config.get_user_hash(ctx.author.id)
+            user_id_or_hash = ctx.author.id
+        elif not user_id_or_hash.isdigit() and len(user_id_or_hash)==64:
+            user_id_or_hash = self.config.get_user_id_by_hash(user_id_or_hash)
+        else:
+            await ctx.send("Invalid user ID or hash")
+            return
         self.config.reset_user_penalty(user_id_or_hash)
         await ctx.send("User penalty reset")
 
