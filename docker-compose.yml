@@ -1,0 +1,40 @@
+version: "3"
+
+services:
+  discord-bot-prod:
+    container_name: wormhole-bot-prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wormhole-bot:latest
+    volumes:
+      - .:/app
+      - ssd-data:/mnt/ExtremeSSD/Wormhole
+    env_file:
+      - .env
+    network_mode: "host"
+    restart: always
+    command: ["python", "run_discord.py"]
+
+  discord-bot-debug:
+    container_name: wormhole-bot-debug
+    build:
+      context: .
+      dockerfile: Dockerfile.debug
+    image: wormhole-bot:debug
+    volumes:
+      - .:/app
+      - ssd-data:/mnt/ExtremeSSD/Wormhole
+    env_file:
+      - .env
+    network_mode: "host"
+    restart: always
+    command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
+
+volumes:
+  ssd-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/ExtremeSSD/Wormhole

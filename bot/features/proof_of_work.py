@@ -27,7 +27,7 @@ class PoWHandler:
                 f"User difficulty: {user_config.difficulty}"
             )
             self.config.calculate_user_difficulty(user_id)
-            print(error_message)
+            self.config.logger.error(error_message)
             return False, "You need to solve the PoW puzzle before sending messages or using commands."
 
         user_config.can_send_message = True

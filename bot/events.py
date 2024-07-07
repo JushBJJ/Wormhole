@@ -33,7 +33,7 @@ class EventHandlers(commands.Cog):
                 "message": f"{message.author.name}: {message.content}",
                 "from_discord": True
             })
-            self.bot.redis_client.publish('tox_node', tox_message)
+            #self.bot.redis_client.publish('tox_node', tox_message)
 
             tasks = set()
             user_id = message.author.id
@@ -73,7 +73,7 @@ class EventHandlers(commands.Cog):
 
     async def send_startup_message(self):
         for channel_name, channel_id in self.bot.config.channels.items():
-            print("Loaded Channel: ", channel_name)
+            self.bot.logger.info("Loaded Channel: ", channel_name)
             if channel_name == "wormhole":
                 for _id in channel_id.keys():
                     channel = self.bot.get_channel(int(_id))
