@@ -24,5 +24,12 @@ __pycache__
 
 # Ignore development and test files
 tests/
-
 build/
+
+# Ignore environment files
+.env
+.env_dev
+
+# Config files
+config.json
+default_config.json

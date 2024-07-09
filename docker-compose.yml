@@ -26,7 +26,7 @@ services:
       - .:/app
       - ssd-data:/mnt/ExtremeSSD/Wormhole
     env_file:
-      - .env
+      - .env_dev
     network_mode: "host"
     restart: always
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
