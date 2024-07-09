@@ -12,8 +12,6 @@ import json
 import os
 import time
 
-from bot.utils.logging import setup_logging
-
 dotenv.load_dotenv()
 
 def auto_configure_user(func):
@@ -254,6 +252,10 @@ class WormholeConfig(BaseModel):
         await asyncio.gather(*tasks)
 
 def load_config(config_path: str) -> WormholeConfig:
+    if not os.path.exists(config_path):
+        with open(config_path, 'w') as f:
+            json.dump(WormholeConfig().dict(), f, indent=4)
+
     with open(config_path, 'r') as f:
         config_data = json.load(f)
     return WormholeConfig(**config_data)

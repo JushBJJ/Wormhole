@@ -1,4 +1,5 @@
 import asyncio
+import os
 import bot
 from bot.config import load_config, save_config, WormholeConfig
 from services.discord import DiscordBot
@@ -9,7 +10,7 @@ async def main():
     logger = setup_logging()
     logger.info("Starting Wormhole bot")
 
-    config_path = 'config/config.json'
+    config_path = os.getenv("CONFIG_PATH", "config/config.json")
     config: WormholeConfig = load_config(config_path)
 
     discord_bot = DiscordBot(config)
