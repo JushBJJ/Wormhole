@@ -8,7 +8,7 @@ from openai import AsyncOpenAI as OpenAI
 from pydantic import BaseModel, Field
 from bot.features.LLM.config import auto_find_command_prompt
 from bot.commands import admin, general, wormhole
-from discord.ext.commands import Command
+from discord.ext.commands import Command, Group
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -38,9 +38,9 @@ class OllamaLLM:
             mode=self.config.mode
         )
 
-    async def generate_json(self, prompt: str, model: Optional[str] = None, response_schema: Optional[Type[T]] = None,  **kwargs) -> Any:
+    async def generate_json(self, user_input: str, model: Optional[str] = None, response_schema: Optional[Type[T]] = None,  **kwargs) -> Any:
         messages = [m for m in kwargs.get("messages", [])]
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": user_input})
         response = await self.client.chat.completions.create(
             model=model or self.config.default_model,
             messages=messages,
@@ -49,33 +49,46 @@ class OllamaLLM:
         return response
     
 class moderation_schema(BaseModel):
-    abuse_probability: int = Field(0, ge=0, le=10, description="The probability of the user abusing the command")
-    spam_probability: int = Field(0, ge=0, le=10, description="The probability of the user spamming the command")
-    useless_probability: int = Field(0, ge=0, le=10, description="The probability of the user wasting time")
-    ban_probability: int = Field(0, ge=0, le=10, description="The probability that the user should be banned")
+    abuse_probability: int = Field(..., ge=0, le=10, description="The probability of the user abusing the command")
+    spam_probability: int = Field(..., ge=0, le=10, description="The probability of the user spamming the command")
+    useless_probability: int = Field(..., ge=0, le=10, description="The probability of the user wasting time")
+    ban_probability: int = Field(..., ge=0, le=10, description="The probability that the user should be banned")
 
 def generate_command_enum():
     commands = {}
+    sub_commands = {}
+
+    def add_command(name, command):
+        if isinstance(command, Group):
+            commands[name] = name
+            for subcmd in command.commands:
+                full_name = f"{name} {subcmd.name}"
+                sub_commands[full_name] = full_name
+        elif isinstance(command, Command):
+            commands[name] = name
+
     for module in [general.GeneralCommands, admin.AdminCommands, wormhole.WormholeCommands]:
         for name, member in module.__dict__.items():
-            if isinstance(member, Command):
-                commands[name] = name
-    return Enum('CommandName', commands)
+            if isinstance(member, (Command, Group)):
+                add_command(name, member)
 
+    return Enum('CommandName', commands), Enum('CommandName', sub_commands)
 
-def create_get_command_schema(CommandName):
+def create_get_command_schema(CommandName, SubCommandName):
     class get_command_schema(BaseModel):
+        thinking: str = Field(..., description="What is your thought process behind the user input? What is the user trying to convey?")
         moderation: moderation_schema = Field(..., description="Moderation probabilities")
-        matched_command: CommandName = Field(..., description="The command that was matched")
-        match_probability: int = Field(0, ge=0, le=10, description="The probability of the command matching the user input")
-        matched_command_parameters: List[str] = Field([], description="Command parameters based off user input")
-        response_to_user: str = Field("", description="The response to the user")
+        matched_command: str = Field(..., description="What command did you find the most suitable?")
+        matched_subcommand: Optional[str] = Field(..., description="Was there any subcommand that matched the user input?")
+        match_probability: int = Field(..., ge=0, le=10, description="The probability of the command matching the user input")
+        matched_command_parameters: List[str] = Field(..., description="What are the parameters of the matched command?")
+        reasoning: str = Field(..., description="What is your reasoning behind the match probability and response?")
     
     return get_command_schema
 
 async def get_closest_command(user_input: str, user_role: str, user_id: int, commands: dict, config=OllamaConfig(), **kwargs):
-    CommandName = generate_command_enum()
-    get_command_schema = create_get_command_schema(CommandName)
+    CommandName, SubCommandName = generate_command_enum()
+    get_command_schema = create_get_command_schema(CommandName, SubCommandName)
 
     ollama = OllamaLLM(config)
     prompt = auto_find_command_prompt(user_input, user_role, user_id, commands)
