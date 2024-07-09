@@ -7,7 +7,7 @@ from bot.features.user_management import UserManagement
 from bot.features.content_filtering import ContentFiltering
 from bot.features.role_management import RoleManagement
 from bot.features.proof_of_work import PoWHandler
-from bot.features.LLM.ollama import AnyscaleConfig, get_closest_command
+from bot.features.LLM.gemini import get_closest_command
 from bot.features.embed import create_embed
 
 import discord
@@ -131,10 +131,10 @@ class DiscordBot(commands.Bot):
                 user_role = self.config.get_user_config_by_id(ctx.author.id).role,
                 user_id = ctx.author.id,
                 commands = self.all_commands,
-                messages = [{"role": msg.role, "content": msg.content} for msg in user_config.temp_command_message_history]
+                #messages = [{"role": msg.role, "content": msg.content} for msg in user_config.temp_command_message_history]
             )
-            user_config.temp_command_message_history.append(tempMessageInfo(role="user", content=ctx.message.content))            
-            user_config.temp_command_message_history.append(tempMessageInfo(role="bot", content=response.response_to_user))
+            #user_config.temp_command_message_history.append(tempMessageInfo(role="user", content=ctx.message.content))            
+            #user_config.temp_command_message_history.append(tempMessageInfo(role="bot", content=response.response_to_user))
             
             if len(user_config.temp_command_message_history) > 10:
                 user_config.temp_command_message_history.pop(0)
@@ -153,23 +153,23 @@ class DiscordBot(commands.Bot):
                 user_config.difficulty_penalty += 1
                 await ctx.send("Your difficulty penalty has been increased by 0.5 due to spamming the bot.")
                 return
-            elif response.matched_command.name == "":
+            elif response.matched_command == "":
                 await ctx.send(
                     embed=create_embed(
                         title="Command Error",
-                        description=f"{response.response_to_user}"
+                        description=f"Unknown command `{ctx.message.content}`"
                     )
                 )
                 return
 
             description = f"Error: `{str(error)}`\n\n"\
-                            f"Did you mean `{response.matched_command.name}`?\n\n"\
+                            f"Did you mean `{response.matched_command} {response.matched_subcommand}`?\n\n"\
             
             if response.match_probability > 7:
                 description += f"Auto-executing command: `Yes`\n"
-                description += f"Full command: `%{response.matched_command.name} {' '.join(response.matched_command_parameters)}`"
+                description += f"Full command: `%{response.matched_command} {response.matched_subcommand} {' '.join(response.matched_command_parameters)}`"
             else:
-                params = self.all_commands[response.matched_command.name].params
+                params = self.all_commands[response.matched_command].params
                 params = [f"`{key}` - `{value.annotation}`" for key, value in params.items() if key != "kwargs"]
                 params_str = "\n".join(params)
                 description += f"Command Parameters:\n{params_str}"
@@ -181,8 +181,39 @@ class DiscordBot(commands.Bot):
                 )
             )
             
-            if response.match_probability > 7:
-                await ctx.invoke(self.all_commands[response.matched_command.name], *response.matched_command_parameters)
+            if response.match_probability >= 6:
+                matched_command = response.matched_command
+                matched_subcommand = response.matched_subcommand or ""
+                command = self.get_command(matched_command)
+                parameters = response.matched_command_parameters
+
+                if isinstance(command, commands.core.Group):
+                    if command.get_command(matched_subcommand) is None and matched_subcommand:
+                        try:
+                            parameters = [matched_subcommand] + parameters
+                            await ctx.invoke(command, *parameters)
+                        except Exception as e:
+                            await ctx.send(embed=create_embed(
+                                title="Command Error",
+                                description=f"Command `{matched_command} {matched_subcommand}` not found"
+                            ))
+                    else:
+                        if matched_subcommand:
+                            command = command.get_command(matched_subcommand)
+                        if len(parameters) == 0:
+                            await ctx.invoke(command)
+                        else:
+                            await ctx.invoke(command, *parameters)
+                elif isinstance(command, commands.core.Command):
+                    if len(parameters) == 0:
+                        await ctx.invoke(command)
+                    else:
+                        await ctx.invoke(command, *parameters)
+                else:
+                    await ctx.send(embed=create_embed(
+                        title="Command Error",
+                        description=f"Command `{matched_command}` not found"
+                    ))
 
             self.logger.info(response)
 

@@ -28,9 +28,15 @@ class AdminCommands(commands.Cog):
         self.bot = bot
         self.config: WormholeConfig = bot.config
 
-    @commands.command(case_insensitive=True)
+    @commands.group(case_insensitive=True)
     @is_wormhole_admin()
-    async def add_channel(self, ctx, channel_name: str, **kwargs):
+    async def channel(self, ctx):
+        """Channel management commands"""
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid channel command. Use `help channel` for more information.")
+
+    @channel.command(name="add")
+    async def add_channel(self, ctx, channel_name: str):
         """Add a new channel to the Wormhole network"""
         if channel_name not in self.config.channel_list:
             self.config.channel_list.append(channel_name)
@@ -39,9 +45,8 @@ class AdminCommands(commands.Cog):
         else:
             await ctx.send(f"Channel {channel_name} already exists")
 
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def remove_channel(self, ctx, channel_name: str, **kwargs):
+    @channel.command(name="remove")
+    async def remove_channel(self, ctx, channel_name: str):
         """Remove a channel from the Wormhole network"""
         if channel_name in self.config.channel_list:
             self.config.channel_list.remove(channel_name)
@@ -50,9 +55,15 @@ class AdminCommands(commands.Cog):
         else:
             await ctx.send(f"Channel {channel_name} does not exist")
 
-    @commands.command(case_insensitive=True)
+    @commands.group(case_insensitive=True)
     @is_wormhole_admin()
-    async def ban_user(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
+    async def admin(self, ctx):
+        """Admin management commands"""
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid admin command. Use `help admin` for more information.")
+
+    @admin.command(name="ban")
+    async def ban_user(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Ban a user from using the Wormhole bot"""
         user_hash = self.config.get_user_hash(user_id_or_hash)
         if user_hash not in self.config.banned_users:
@@ -61,9 +72,8 @@ class AdminCommands(commands.Cog):
         else:
             await ctx.send(f"User `{user_hash}` is already banned")
 
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def unban_user(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
+    @admin.command(name="unban")
+    async def unban_user(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Unban a user from using the Wormhole bot"""
         user_hash = self.config.get_user_hash(user_id_or_hash)
         if user_hash in self.config.banned_users:
@@ -72,9 +82,8 @@ class AdminCommands(commands.Cog):
         else:
             await ctx.send(f"User `{user_hash}` is not banned")
 
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def admin(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
+    @admin.command(name="admin")
+    async def make_admin(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Add a new admin to the wormhole bot"""
         user_hash = self.config.get_user_hash(user_id_or_hash)
         user = self.config.get_user_config_by_hash(user_hash)
@@ -84,9 +93,8 @@ class AdminCommands(commands.Cog):
         else:
             await ctx.send(f"{user_hash} is already a Wormhole Admin")
 
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def unadmin(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
+    @admin.command(name="unadmin")
+    async def remove_admin(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Remove admin status from a user"""
         user_hash = self.config.get_user_hash(user_id_or_hash)
         user = self.config.get_user_config_by_hash(user_hash)
@@ -96,10 +104,29 @@ class AdminCommands(commands.Cog):
         else:
             await ctx.send(f"{user_hash} is already a Wormhole User")
 
-    @commands.command(case_insensitive=True)
+    @admin.command(name="reset_penalty")
+    async def reset_user_penalty(self, ctx, user_id_or_hash: Union[int, str] = None):
+        """Reset the user's penalty"""
+        if user_id_or_hash is None:
+            user_id_or_hash = ctx.author.id
+        elif not user_id_or_hash.isdigit() and len(user_id_or_hash)==64:
+            user_id_or_hash = self.config.get_user_id_by_hash(user_id_or_hash)
+        else:
+            await ctx.send("Invalid user ID or hash")
+            return
+        self.config.reset_user_penalty(user_id_or_hash)
+        await ctx.send("User penalty reset")
+
+    @commands.group(case_insensitive=True)
     @is_wormhole_admin()
-    async def broadcast(self, ctx, channel_name: str, *, message: str):
-        """Broadcast a message to all channels concurrently"""
+    async def broadcast(self, ctx):
+        """Broadcast message commands"""
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Invalid broadcast command. Use `help broadcast` for more information.")
+
+    @broadcast.command(name="embed")
+    async def broadcast_embed(self, ctx, channel_name: str, *, message: str):
+        """Broadcast a message to all channels concurrently with embed"""
         if channel_name not in self.config.channel_list:
             await ctx.send(f"Channel {channel_name} does not exist")
             return
@@ -118,11 +145,10 @@ class AdminCommands(commands.Cog):
 
         tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
         await asyncio.gather(*tasks)
-    
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def raw_broadcast(self, ctx, channel_name: str, *, message: str):
-        """Broadcast a message to a specific channel"""
+
+    @broadcast.command(name="raw")
+    async def broadcast_raw(self, ctx, channel_name: str, *, message: str):
+        """Broadcast a raw message to a specific channel"""
         if channel_name not in self.config.channel_list:
             await ctx.send(f"Channel {channel_name} does not exist")
             return
@@ -134,20 +160,6 @@ class AdminCommands(commands.Cog):
         
         tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
         await asyncio.gather(*tasks)
-    
-    @commands.command(case_insensitive=True)
-    @is_wormhole_admin()
-    async def reset_user_penalty(self, ctx, user_id_or_hash: Union[int, str] = None, **kwargs):
-        """Reset the user's penalty"""
-        if user_id_or_hash is None:
-            user_id_or_hash = ctx.author.id
-        elif not user_id_or_hash.isdigit() and len(user_id_or_hash)==64:
-            user_id_or_hash = self.config.get_user_id_by_hash(user_id_or_hash)
-        else:
-            await ctx.send("Invalid user ID or hash")
-            return
-        self.config.reset_user_penalty(user_id_or_hash)
-        await ctx.send("User penalty reset")
 
 async def setup(bot):
     await bot.add_cog(AdminCommands(bot))
