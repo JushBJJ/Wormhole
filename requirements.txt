@@ -10,3 +10,4 @@ outlines
 setuptools
 debugpy
 google-generativeai
+asyncpg

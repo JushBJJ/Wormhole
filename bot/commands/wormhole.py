@@ -1,12 +1,13 @@
 from typing import Optional, Union
 from discord import NotFound
 from discord.ext import commands
-from bot.config import WormholeConfig, ChannelConfig
+from bot.config import WormholeConfig
 from bot.commands.admin import is_wormhole_admin
+from services.discord import DiscordBot
 
 class WormholeCommands(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: DiscordBot = bot
         self.config: WormholeConfig = bot.config
 
     @commands.group(case_insensitive=True, invoke_without_command=True)
@@ -18,16 +19,21 @@ class WormholeCommands(commands.Cog):
     @wormhole.command(name="list")
     async def list_channels(self, ctx):
         """List all available Wormhole channels"""
-        channels = "\n- ".join(self.config.channel_list)
-        await ctx.send(f"Available Wormhole channels:\n- {channels}")
+        channels = await self.config.get_all_channels()
+        channel_names = "\n- ".join([channel['channel_name'] for channel in channels])
+        await ctx.send(f"Available Wormhole channels:\n- {channel_names}")
 
     @wormhole.command(name="join")
     async def join(self, ctx, channel_name: str):
         """Join a Wormhole channel"""
-        if self.config.get_channel_name_by_id(ctx.channel.id) == "":
-            if channel_name in self.config.channel_list:
-                if str(ctx.channel.id) not in self.config.channels[channel_name]:
-                    self.config.channels[channel_name][str(ctx.channel.id)] = ChannelConfig()
+        channel_id = str(ctx.channel.id)
+        current_channel = await self.config.get_channel_name_by_id(channel_id)
+        if not current_channel:
+            channel_exists = await self.config.category_exists(channel_name)
+            if channel_exists:
+                channel_joined = await self.config.get_channel_category_by_id(channel_id)
+                if not channel_joined:
+                    await self.config.join_channel(channel_name, channel_id, str(ctx.guild.id))
                     await ctx.send(f"Joined Wormhole channel: {channel_name}")
                 else:
                     await ctx.send(f"This channel is already connected to {channel_name}")
@@ -35,22 +41,20 @@ class WormholeCommands(commands.Cog):
                 await ctx.send(f"Channel {channel_name} does not exist")
         else:
             await ctx.send(
-                f"This channel is already connected to {self.config.get_channel_name_by_id(ctx.channel.id)}"
+                f"This channel is already connected to {current_channel}"
                 f"\nPlease use `%wormhole leave` to leave the current channel"
             )
 
     @wormhole.command(name="leave")
     async def leave(self, ctx):
         """Leave the current Wormhole channel"""
-        channel_list = self.config.channel_list
-        for channel_name, channels in self.config.channels.items():
-            if str(ctx.channel.id) in channels and channel_name in channel_list:
-                del self.config.channels[channel_name][str(ctx.channel.id)]
-                await ctx.send(f"Left Wormhole channel: {channel_name}")
-                return
-            elif channel_name not in channel_list:
-                await ctx.send(f"{channel_name} is not a valid channel to leave.\nPlease use `%wormhole list` to see the list of valid channels.")
-        await ctx.send("This channel is not connected to any Wormhole channel")
+        channel_id = str(ctx.channel.id)
+        current_channel = await self.config.get_channel_category_by_id(channel_id)
+        if current_channel:
+            await self.config.leave_channel(channel_id)
+            await ctx.send(f"Left Wormhole channel: {current_channel}")
+        else:
+            await ctx.send("This channel is not connected to any Wormhole channel")
 
     @commands.group(case_insensitive=True, invoke_without_command=True)
     async def pow(self, ctx):
@@ -62,21 +66,16 @@ class WormholeCommands(commands.Cog):
     async def reset_user_difficulty(self, ctx, user_id_or_hash: Optional[Union[int, str]] = None):
         """Reset the user's difficulty"""
         if user_id_or_hash is None:
-            user_id_or_hash = ctx.author.id
-        self.config.reset_user_difficulty(user_id_or_hash)
+            user_id_or_hash = str(ctx.author.id)
+        await self.config.reset_user_difficulty(user_id_or_hash)
         await ctx.send("User difficulty reset")
 
     @pow.command(name="pow_status")
     async def pow_status(self, ctx, user_id_or_hash: Optional[Union[int, str]] = None):
         """Get the current PoW status for the user"""
         if user_id_or_hash is None:
-            user_id_or_hash = ctx.author.id
-        
-        try:
-            user_id_or_hash = int(user_id_or_hash)
-        except ValueError:
-            user_id_or_hash = self.config.get_user_id_by_hash(user_id_or_hash)
-        status = self.bot.pow_handler.get_pow_status(user_id_or_hash)
+            user_id_or_hash = str(ctx.author.id)
+        status = await self.bot.pow_handler.get_pow_status(user_id_or_hash)
         await ctx.send(status)
 
 async def setup(bot):

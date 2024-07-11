@@ -1,12 +1,12 @@
-from collections import defaultdict
 import discord
 from typing import Union, Optional
 from discord.ext import commands
+from bot.config import WormholeConfig
 
 class GeneralCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.config = bot.config
+        self.config: WormholeConfig = bot.config
 
     @commands.command(case_insensitive=True)
     async def ping(self, ctx):
@@ -32,13 +32,13 @@ class GeneralCommands(commands.Cog):
             for command in cog.get_commands():
                 if not command.hidden:
                     if isinstance(command, commands.Group):
-                        commands_list.append(f"`{command.name}`*")
+                        commands_list.append(f"`{command.name}`\*")
                     else:
                         commands_list.append(f"`{command.name}`")
             if commands_list:
                 embed.add_field(name=cog_name, value=", ".join(commands_list), inline=False)
 
-        embed.set_footer(text="\* denotes a command group")
+        embed.set_footer(text="* denotes a command group")
         await ctx.send(embed=embed)
 
     async def show_command_help(self, ctx, command_name: str):
@@ -92,17 +92,17 @@ class GeneralCommands(commands.Cog):
         try:
             try:
                 user_id = int(user_id_or_hash)
-                user_config = self.config.get_user_config_by_id(user_id)
+                user_config = await self.config.get_user(user_id)
                 send_method = ctx.author.send
                 
-                if self.config.get_user_role(ctx.author.id) != "admin" and ctx.author.id != user_id:
+                if await self.config.get_user_role(ctx.author.id) != "admin" and ctx.author.id != user_id:
                     await ctx.send("You must be a Wormhole admin to view user information by ID.")
                     return
             except ValueError:
-                user_config = self.config.get_user_config_by_hash(user_id_or_hash)
+                user_config = await self.config.get_user_by_hash(user_id_or_hash)
                 send_method = ctx.send
 
-            embed = self.create_user_embed(user_config)
+            embed = await self.create_user_embed(user_config)
             await send_method(embed=embed)
             if send_method == ctx.author.send:
                 await ctx.send("For privacy reasons, I have sent you a DM.")
@@ -112,16 +112,16 @@ class GeneralCommands(commands.Cog):
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
-    def create_user_embed(self, user_config):
-        description = f"Names: **{str(user_config.names)}**\n" \
-                      f"Role: **{user_config.role}**\n" \
-                      f"Hash: **{user_config.hash}**"
+    async def create_user_embed(self, user_config):
+        description = f"Names: **{str(user_config['names'])}**\n" \
+                      f"Role: **{user_config['role']}**\n" \
+                      f"Hash: **{user_config['hash']}**"
         embed = discord.Embed(
             title="User Information",
             description=description,
-            color=self.config.get_role_color(user_config.role)
+            color=await self.config.get_role_color(user_config['role'])
         )
-        embed.set_image(url=user_config.profile_picture)
+        embed.set_image(url=user_config['profile_picture'])
         embed.set_footer(text="Missing info means not registered yet")
         return embed
 

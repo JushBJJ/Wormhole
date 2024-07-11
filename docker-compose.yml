@@ -1,4 +1,4 @@
-version: "3"
+version: "3.8"
 
 services:
   discord-bot-prod:
@@ -12,9 +12,39 @@ services:
       - ssd-data:/mnt/ExtremeSSD/Wormhole
     env_file:
       - .env
-    network_mode: "host"
+    networks:
+      - wormhole-network
+    depends_on:
+      - postgres-prod
     restart: always
     command: ["python", "run_discord.py"]
+
+  postgres-prod:
+    image: postgres:13
+    container_name: wormhole-postgres-prod
+    env_file:
+      - .env
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/database/postgres:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - wormhole-network
+    ports:
+      - "5432:5432"
+
+  pgadmin-prod:
+    image: dpage/pgadmin4
+    container_name: wormhole-pgadmin-prod
+    env_file:
+      - .env
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/database/pgadmin:/var/lib/pgadmin
+    networks:
+      - wormhole-network
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres-prod
 
   discord-bot-debug:
     container_name: wormhole-bot-debug
@@ -24,12 +54,44 @@ services:
     image: wormhole-bot:debug
     volumes:
       - .:/app
-      - ssd-data:/mnt/ExtremeSSD/Wormhole
+      - ssd-data-dev:/mnt/ExtremeSSD/Wormhole/dev
     env_file:
       - .env_dev
-    network_mode: "host"
+    networks:
+      - wormhole-network-dev
+    ports:
+      - "5678:5678"
+    depends_on:
+      - postgres-debug
     restart: always
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
+
+  postgres-debug:
+    image: postgres:latest
+    container_name: wormhole-postgres-debug
+    env_file:
+      - .env_dev
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/dev/database/postgres:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - wormhole-network-dev
+    ports:
+      - "5433:5432"
+
+  pgadmin-debug:
+    image: dpage/pgadmin4:latest
+    container_name: wormhole-pgadmin-debug
+    env_file:
+      - .env_dev
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/dev/database/pgadmin:/var/lib/pgadmin
+    networks:
+      - wormhole-network-dev
+    ports:
+      - "5051:80"
+    depends_on:
+      - postgres-debug
 
 volumes:
   ssd-data:
@@ -38,3 +100,15 @@ volumes:
       type: none
       o: bind
       device: /mnt/ExtremeSSD/Wormhole
+  ssd-data-dev:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/ExtremeSSD/Wormhole/dev
+
+networks:
+  wormhole-network:
+    driver: bridge
+  wormhole-network-dev:
+    driver: bridge
