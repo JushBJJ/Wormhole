@@ -1,195 +1,316 @@
 import asyncio
+from datetime import datetime
 import hashlib
-from logging import Logger
 import math
-import discord
-from pydantic import BaseModel, Field
+import time
 from typing import Dict, List, Optional, Union
 from functools import wraps
 
+import asyncpg
 import dotenv
-import json
 import os
-import time
+import re
 
 dotenv.load_dotenv()
 
 def auto_configure_user(func):
     @wraps(func)
-    def wrapper(self, user_id: int, *args, **kwargs):
-        user_id_str = str(user_id)
-        user_config = self.users.get(user_id_str)
-
-        if user_config is None:
-            hashed_userid = compute_user_hash(self, user_id)
-            self.users[user_id_str] = UserConfig(hash=hashed_userid)
-        else:
-            if not user_config.hash:
-                user_config.hash = compute_user_hash(self, user_id)
-
-            default_config = UserConfig().dict()
-            for field, value in default_config.items():
-                if field not in user_config.__dict__:
-                    setattr(user_config, field, value)
-        return func(self, user_id, *args, **kwargs)
+    async def wrapper(self, user_id: str, *args, **kwargs):
+        await self.get_user(user_id)
+        return await func(self, user_id, *args, **kwargs)
     return wrapper
 
-class ChannelConfig(BaseModel):
-    react: bool = False
+def classify_user_id(user_id):
+    if not isinstance(user_id, str):
+        return "Invalid: Not a string"
     
-    async def handle_config_pre(self, message, bot):
-        if self.react:
-            await message.add_reaction('⏳')
+    try:
+        int(user_id)
+        return "Digit"
+    except ValueError:
+        if re.match(r'^[a-fA-F0-9]{64}$', user_id):
+            return "SHA256 hash"
+        else:
+            return "Other"
+
+class WormholeConfig:
+    def __init__(self):
+        self.db_url = os.getenv("DATABASE_URL")
+        self.global_salt = os.getenv("global_salt") or "else your cluster is compromised"
+        self.pool = None
+
+    async def initialize(self):
+        self.pool = await asyncpg.create_pool(self.db_url)
+
+    # User Management
+    # ---------------
+
+    async def get_user(self, user_id: str) -> Dict:
+        async with self.pool.acquire() as conn:
+            user = await conn.fetchrow(
+                """
+                SELECT * FROM Users WHERE user_id = $1
+                """,
+                user_id
+            )
+            if not user:
+                user_hash = await self.compute_user_hash(user_id)
+                user = await conn.fetchrow(
+                    """
+                    INSERT INTO Users (user_id, hash) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET hash = $2
+                    RETURNING *
+                    """,
+                    user_id, user_hash
+                )
+            return dict(user)
+
+    async def update_user_config(self, user_id: str, **kwargs):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE Users SET 
+                    role = COALESCE($1, role),
+                    profile_picture = COALESCE($2, profile_picture),
+                    difficulty = COALESCE($3, difficulty),
+                    difficulty_penalty = COALESCE($4, difficulty_penalty),
+                    can_send_message = COALESCE($5, can_send_message)
+                WHERE user_id = $6
+                """,
+                kwargs.get('role'),
+                kwargs.get('profile_picture'),
+                kwargs.get('difficulty'),
+                kwargs.get('difficulty_penalty'),
+                kwargs.get('can_send_message'),
+                user_id
+            )
+
+    async def get_user_by_hash(self, user_hash: str) -> Dict:
+        async with self.pool.acquire() as conn:
+            user = await conn.fetchrow(
+                """
+                SELECT * FROM Users WHERE hash = $1
+                """,
+                user_hash
+            )
+            return dict(user) if user else {}
+
+    async def get_user_id_by_hash(self, user_hash: str) -> Optional[str]:
+        async with self.pool.acquire() as conn:
+            user_id = await conn.fetchval(
+                """
+                SELECT user_id FROM Users WHERE hash = $1
+                """,
+                user_hash
+            )
+            return user_id
     
-    async def handle_config_post(self, message, bot):
-        if self.react:
-            await message.remove_reaction('⏳', bot.user)
-            await message.add_reaction('✅')
-
-class MessageInfo(BaseModel):
-    timestamp: float
-    hash: str
-
-class tempMessageInfo(BaseModel):
-    role: str
-    content: str
-
-class UserConfig(BaseModel):
-    hash: str = ""
-    role: str = "user"
-    names: List[str] = []
-    profile_picture: str = ""
-    message_history: List[MessageInfo] = Field(default_factory=list)
-    temp_command_message_history: List[tempMessageInfo] = Field(default_factory=list)
-    difficulty: float = 0
-    difficulty_penalty: float = 0
-    can_send_message: bool = True
-    nonce: int = 0
-
-class RoleConfig(BaseModel):
-    color: str
-    permissions: List[str]
-
-class ContentFilterConfig(BaseModel):
-    enabled: bool = True
-    sensitivity: float = 0.7
-
-class WormholeConfig(BaseModel):
-    admins: List[int] = Field(default_factory=list)
-    servers: List[int] = Field(default_factory=list)
-    channel_list: List[str] = Field(default_factory=list)
-    channels: Dict[str, Dict[str, ChannelConfig]] = Field(default_factory=dict)
-    banned_servers: List[int] = Field(default_factory=list)
-    banned_users: List[str] = Field(default_factory=list)
-    banned_words: List[str] = Field(default_factory=list)
-    users: Dict[str, UserConfig] = Field(default_factory=dict)
-    roles: Dict[str, RoleConfig] = Field(default_factory=dict)
-    content_filter: ContentFilterConfig = ContentFilterConfig()
-    max_difficulty: int = 10
+    async def get_user_hash_by_id(self, user_id: str) -> Optional[str]:
+        async with self.pool.acquire() as conn:
+            user_hash = await conn.fetchval(
+                """
+                SELECT hash FROM Users WHERE user_id = $1
+                """,
+                user_id
+            )
+            return user_hash
     
-    discord_token: str = Field(default_factory=lambda: os.getenv("token"))
-    global_salt: str = Field(default_factory=lambda: os.getenv("global_salt") or "else your cluster is compromised")
+    async def get_user_hash(self, user_id: str) -> str:
+        user = await self.get_user(user_id)
+        return user['hash']
 
-    class Config:
-        extra = "allow"
+    async def change_user_role(self, user_hash: str, role: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE Users SET role = $1 WHERE hash = $2
+                """,
+                role, user_hash
+            )
 
-    def update_config(self, new_config: Dict):
-        for key, value in new_config.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                self.__dict__[key] = value
+    async def add_username(self, user_id: str, name: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO Usernames (user_id, name) VALUES ($1, $2)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                user_id, name
+            )
+
+    async def is_user_banned(self, user_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            is_banned = await conn.fetchval(
+                """
+                SELECT EXISTS(SELECT 1 FROM BannedUsers WHERE user_id = $1)
+                """,
+                user_id
+            )
+            
+            is_banned_2 = False
+            if classify_user_id(user_id) == "Digit":
+                user_hash = hashlib.sha256(f"{self.global_salt}{user_id}".encode()).hexdigest()
+                is_banned_2 = await conn.fetchval(
+                    """
+                    SELECT EXISTS(SELECT 1 FROM BannedUsers WHERE user_id = $1)
+                    """,
+                    user_hash
+                )
+            return is_banned or is_banned_2
+
+    async def ban_user(self, user_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO BannedUsers (user_id) VALUES ($1)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                user_id
+            )
+
+    async def unban_user(self, user_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM BannedUsers WHERE user_id = $1
+                """,
+                user_id
+            )
     
-    def get_channel_by_id(self, channel_id: int) -> ChannelConfig:
-        channel_id = str(channel_id)
-        for channels in self.channels.values():
-            if channel := channels.get(channel_id):
-                return channel
-        return ChannelConfig()
+    async def update_user_avatar(self, user_id: str, avatar: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE Users SET profile_picture = $1 WHERE user_id = $2
+                """,
+                avatar, user_id
+            )
 
-    def get_channel_name_by_id(self, channel_id: int) -> str:
-        for name, channels in self.channels.items():
-            if str(channel_id) in channels:
-                return name
-        return ""
+    async def user_exists(self, user_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            user = await conn.fetchval(
+                """
+                SELECT EXISTS(SELECT 1 FROM Users WHERE user_id = $1)
+                """,
+                user_id
+            )
+            
+            user2 = False
+            if classify_user_id(user_id) == "Digit":
+                user_hash = hashlib.sha256(f"{self.global_salt}{user_id}".encode()).hexdigest()
+                user2 = await conn.fetchval(
+                    """
+                    SELECT EXISTS(SELECT 1 FROM Users WHERE hash = $1)
+                    """,
+                    user_hash
+                )
+            return user or user2
 
-    def get_all_channel_ids(self) -> list:
-        return [id for channels in self.channels.values() for id in channels]
+    # Message and Attachment History
+    # ------------------------------
 
-    def get_all_channels_by_name(self, name: str) -> list:
-        return list(self.channels.get(name, {}).keys())
-
-    def get_all_channels_by_id(self, channel_id: int) -> list:
-        channel_id = str(channel_id)
-        for _, channels in self.channels.items():
-            if channel_id in channels:
-                return list(channels.keys())
-        return []
-
-    @auto_configure_user
-    def get_user_color(self, user_id: int) -> int:
-        user = self.users[str(user_id)]
-        return int(self.roles[user.role].color[1:], 16)
-
-    def get_role_color(self, role: str) -> int:
-        return int(self.roles[role].color[1:], 16)
-
-    @auto_configure_user
-    def get_user_hash(self, user_id: int) -> str:
-        if not isinstance(user_id, int):
-            return self.get_user_config_by_hash(user_id).hash
-        return self.users[str(user_id)].hash
-
-    def get_user_config_by_hash(self, user_hash: str) -> UserConfig:
-        return next((user for user in self.users.values() if user.hash == user_hash), dummy_user_config)
-
-    def get_user_config_by_id(self, user_id: int) -> UserConfig:
-        return self.users.get(str(user_id), dummy_user_config)
-
-    def get_user_id_by_hash(self, user_hash: str) -> Optional[int]:
-        return next((int(user_id) for user_id, user in self.users.items() if user.hash == user_hash), 0)
+    def hash_message(self, user_hash, message_content, nonce):
+        return hashlib.sha256((self.global_salt + user_hash + message_content + str(nonce)).encode()).hexdigest()
 
     @auto_configure_user
-    def reset_user_penalty(self, user_id: int) -> None:
-        self.users[str(user_id)].difficulty_penalty = 0
+    async def update_user_message_history(self, user_id: str, message_link: str, message_hash: str):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO MessageHistory (hash, message_link, user_id, timestamp)
+                VALUES ($1, ARRAY[$2], $3, $4)
+                ON CONFLICT (hash) DO NOTHING
+                """,
+                message_hash, message_link, user_id, time.time()
+            )
 
-    @auto_configure_user
-    def get_user_role(self, user_id: int) -> str:
-        return self.users[str(user_id)].role
+    async def append_link(self, message_hash: str, message_links: list):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE MessageHistory 
+                SET message_link = array_cat(message_link, $1::varchar[])
+                WHERE hash = $2
+                """,
+                message_links, message_hash
+            )
 
-    @auto_configure_user
-    def change_user_role(self, user_hash: str, role: str) -> None:
-        user_config = self.get_user_config_by_hash(user_hash)
-        user_config.role = role
-        user_id = str(self.get_user_id_by_hash(user_hash))
-        self.users[user_id] = user_config
+    async def add_attachment_history(self, user_id: str, attachment_link: str):
+        async with self.pool.acquire() as conn:
+            hashed_content = hashlib.sha256((self.global_salt + user_id + attachment_link).encode()).hexdigest()
+            await conn.execute(
+                """
+                INSERT INTO AttachmentHistory (hash, attachment_link, user_id, timestamp)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (hash) DO NOTHING
+                """,
+                hashed_content, attachment_link, user_id, time.time()
+            )
 
-    @auto_configure_user
-    def add_username(self, user_id: int, name: str) -> None:
-        if name not in self.users[str(user_id)].names:
-            self.users[str(user_id)].names.append(name)
+    async def add_temp_command_message(self, user_id: str, content: str):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO TempCommandMessageHistory (user_id, content)
+                VALUES ($1, $2)
+                """,
+                user_id, content
+            )
 
-    @auto_configure_user
-    def reset_user_difficulty(self, user_id: Union[str, int]) -> None:
-        try:
-            user_config = self.get_user_config_by_id(user_id)
-        except ValueError:
-            user_config = self.get_user_id_by_hash(user_id)
-        user_config.message_history = []
-        user_config.difficulty = 0
-    
-    def update_user_message_history(self, user_id: int, message_content: str):
-        user_config = self.users.get(str(user_id))
-        if user_config:
-            hashed_content = hashlib.sha256((self.global_salt+str(user_id)+message_content).encode()).hexdigest()
-            user_config.message_history.append(MessageInfo(timestamp=time.time(), hash=hashed_content))
-            if len(user_config.message_history) > 100: # Temporary
-                user_config.message_history.pop(0)
+    async def get_temp_command_messages(self, user_id: str) -> List[str]:
+        async with self.pool.acquire() as conn:
+            messages = await conn.fetch(
+                """
+                SELECT content FROM TempCommandMessageHistory
+                WHERE user_id = $1
+                ORDER BY message_id
+                """,
+                user_id
+            )
+            return [message['content'] for message in messages]
 
-    def calculate_user_difficulty(self, user_id: int) -> float:
-        short_term_window = 5 * 60              # 5 minutes
-        medium_term_window = 24 * 60 * 60       # 24 hours
-        long_term_window = 30 * 24 * 60 * 60    # 30 days
+    async def clear_temp_command_messages(self, user_id: str):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM TempCommandMessageHistory
+                WHERE user_id = $1
+                """,
+                user_id
+            )
+
+    async def get_message_hash_by_link(self, message_link):
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(
+                """
+                SELECT hash FROM MessageHistory
+                WHERE $1 = ANY(message_link)
+                """,
+                message_link
+            )
+
+    async def get_message_links(self, message_hash):
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(
+                """
+                SELECT message_link FROM MessageHistory
+                WHERE hash = $1
+                """,
+                message_hash
+            )
+
+    @staticmethod
+    def parse_message_link(link):
+        parts = link.split('/')
+        return parts[-2], parts[-1]
+
+    # User Difficulty Management
+    # --------------------------
+
+    async def calculate_user_difficulty(self, user_id: str, user_joined_at: datetime) -> float:
+        short_term_window = 5 * 60
+        medium_term_window = 24 * 60 * 60
+        long_term_window = 30 * 24 * 60 * 60
         
         short_term_threshold = 10
         medium_term_threshold = 50
@@ -197,77 +318,659 @@ class WormholeConfig(BaseModel):
         
         base_difficulty = 1.0
         
-        user_id = str(user_id)
+        # Calculate the time from the user's join date
+        time_since_joined = time.time() - user_joined_at.timestamp()
         
-        user_config = self.users.get(user_id)
-        if not user_config:
-            self.logger.warning(f"User {user_id} not found")
-            return
+        async with self.pool.acquire() as conn:
+            current_time = time.time()
+            result = await conn.fetchrow(
+                """
+                SELECT 
+                    COUNT(*) FILTER (WHERE timestamp > $2) AS short_term_count,
+                    COUNT(*) FILTER (WHERE timestamp > $3) AS medium_term_count,
+                    COUNT(*) FILTER (WHERE timestamp > $4) AS long_term_count
+                FROM MessageHistory
+                WHERE user_id = $1
+                    AND timestamp > LEAST($2, $3, $4)
+                """,
+                user_id, current_time - short_term_window, 
+                current_time - medium_term_window, current_time - long_term_window
+            )
 
-        current_time = time.time()
-        # Count messages in each time window
-        short_term_count = self._count_messages(user_id, current_time, short_term_window)
-        medium_term_count = self._count_messages(user_id, current_time, medium_term_window)
-        long_term_count = self._count_messages(user_id, current_time, long_term_window)
+            short_term_count = result['short_term_count']
+            medium_term_count = result['medium_term_count']
+            long_term_count = result['long_term_count']
 
-        # Calculate difficulty factors
-        short_term_factor = math.pow(short_term_count / short_term_threshold, 2)
-        medium_term_factor = math.sqrt(medium_term_count / medium_term_threshold)
-        long_term_factor = math.log(long_term_count / long_term_threshold + 1) / math.log(2)
+            short_term_factor = math.pow(short_term_count / short_term_threshold, 2)
+            medium_term_factor = math.sqrt(medium_term_count / medium_term_threshold)
+            long_term_factor = math.log(long_term_count / long_term_threshold + 1) / math.log(2)
 
-        # Calculate weighted difficulty
-        difficulty = base_difficulty * (
-            0.6 * short_term_factor +
-            0.1 * medium_term_factor +
-            0.05 * long_term_factor
-        )
+            difficulty = base_difficulty * (
+                0.6 * short_term_factor +
+                0.1 * medium_term_factor +
+                0.05 * long_term_factor
+            )
 
-        # Apply bonus for consistent long-term usage
-        if long_term_count > long_term_threshold and medium_term_count < medium_term_threshold:
-            long_term_bonus = 0.9
-            difficulty *= long_term_bonus
+            # Factor in the time since the user joined
+            max_time_reduction = 0.8  # Maximum 80% reduction in difficulty
+            time_factor = min(time_since_joined / (365 * 24 * 60 * 60), 1)  # Cap at 1 year
+            time_reduction = max_time_reduction * time_factor
+            difficulty *= (1 - time_reduction)
 
-        penalty = user_config.difficulty_penalty
-        self.users[user_id].difficulty = difficulty + penalty
-        self.logger.info(f"\nUser {user_id} difficulty: {difficulty:.2f}")
-        self.logger.info(f"Short term: {short_term_count} messages in {short_term_window/60:.0f} minutes")
-        self.logger.info(f"Medium term: {medium_term_count} messages in {medium_term_window/3600:.0f} hours")
-        self.logger.info(f"Long term: {long_term_count} messages in {long_term_window/(24*3600):.0f} days")
-        self.logger.info(f"Short term factor: {short_term_factor:.2f}")
-        self.logger.info(f"Medium term factor: {medium_term_factor:.2f}")
-        self.logger.info(f"Long term factor: {long_term_factor:.2f}")
+            user = await self.get_user(user_id)
+            penalty = user['difficulty_penalty']
+            
+            final_difficulty = difficulty + penalty
 
-    def _count_messages(self, user_id: str, current_time: float, time_window: float) -> int:
-        return sum(1 for msg in self.users[user_id].message_history if current_time - msg.timestamp <= time_window)
+            await conn.execute(
+                """
+                UPDATE Users SET difficulty = $1 WHERE user_id = $2
+                """,
+                final_difficulty, user_id
+            )
 
-    async def broadcast(self, bot, channel_name: str, embed: Optional[discord.Embed] = None) -> list:
-        channels = self.get_all_channels_by_name(channel_name)
+            return final_difficulty
+
+    async def reset_user_penalty(self, user_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            if classify_user_id(user_id) == "SHA256 hash":
+                user = await self.get_user_by_hash(user_id)
+                user_id = user['user_id']
+            await conn.execute(
+                """
+                UPDATE Users SET difficulty_penalty = 0 WHERE user_id = $1
+                """,
+                user_id
+            )
+
+    async def reset_user_difficulty(self, user_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            if classify_user_id(user_id) == "SHA256 hash":
+                user = await self.get_user_by_hash(user_id)
+                user_id = user['user_id']
+            await conn.execute(
+                """
+                UPDATE Users SET difficulty = 0, difficulty_penalty = 0 WHERE user_id = $1
+                """,
+                user_id
+            )
+            await conn.execute(
+                """
+                DELETE FROM MessageHistory WHERE user_id = $1
+                """,
+                user_id
+            )
+
+    # Channel Management
+    # ------------------
+
+    async def add_channel(self, channel_name: str, channel_id: str, server_id: int):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO Channels (channel_id, server_id, channel_category)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (channel_id) DO UPDATE SET
+                    server_id = $2,
+                    channel_category = $3
+                """,
+                channel_id, server_id, channel_name
+            )
+            
+    async def remove_channel(self, channel_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM Channels WHERE channel_id = $1
+                """,
+                channel_id
+            )
+    
+    async def join_channel(self, channel_name: str, channel_id: str, server_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO Channels (channel_id, channel_category, server_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (channel_id) DO NOTHING
+                """,
+                channel_id, channel_name, server_id
+            )
+            return True
+    
+    async def leave_channel(self, channel_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM Channels WHERE channel_id = $1
+                """,
+                channel_id
+            )
+            return True
+    
+    async def get_channel_category_by_id(self, channel_id: str) -> Optional[str]:
+        async with self.pool.acquire() as conn:
+            channel = await conn.fetchval(
+                """
+                SELECT channel_category FROM Channels WHERE cghannel_id = $1
+                """,
+                channel_id
+            )
+            return channel
+
+    async def get_channel_by_id(self, channel_id: str) -> Dict:
+        async with self.pool.acquire() as conn:
+            channel = await conn.fetchrow(
+                """
+                SELECT * FROM Channels WHERE channel_id = $1
+                """,
+                channel_id
+            )
+            return dict(channel) if channel else None
+
+    async def get_channel_name_by_id(self, channel_id: str) -> Optional[str]:
+        async with self.pool.acquire() as conn:
+            channel = await conn.fetchval(
+                """
+                SELECT channel_category FROM Channels WHERE channel_id = $1
+                """,
+                channel_id
+            )
+            return channel
+
+    async def get_all_channels(self) -> List[Dict]:
+        async with self.pool.acquire() as conn:
+            channels = await conn.fetch(
+                """
+                SELECT * FROM ChannelList
+                """
+            )
+            return [dict(channel) for channel in channels]
+
+    async def channel_exists(self, channel_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            channel = await conn.fetchval(
+                """
+                SELECT EXISTS(SELECT 1 FROM Channel WHERE channel_id = $1)
+                """,
+                channel_id
+            )
+            return channel
+
+    async def category_exists(self, category: str) -> bool:
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                SELECT EXISTS(SELECT 1 FROM ChannelList WHERE channel_name = $1)
+                """,
+                category
+            )
+            return result
+
+    async def get_channels_by_category(self, category: str) -> List[Dict]:
+        async with self.pool.acquire() as conn:
+            channels = await conn.fetch(
+                """
+                SELECT * FROM Channels WHERE channel_category = $1
+                """,
+                category
+            )
+            return [dict(channel) for channel in channels]
+    
+    async def get_all_channels_in_category_by_id(self, channel_id: str) -> List[str]:
+        async with self.pool.acquire() as conn:
+            channels = await conn.fetch(
+                """
+                SELECT channel_id FROM Channels WHERE channel_category = (
+                    SELECT channel_category FROM Channels WHERE channel_id = $1
+                )
+                """,
+                channel_id
+            )
+            return [channel['channel_id'] for channel in channels]
+
+    # Server Management
+    # -----------------
+
+    async def add_server(self, server_id: int, server_name: str):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO Servers (server_id, server_name)
+                VALUES ($1, $2)
+                ON CONFLICT (server_id) DO UPDATE SET server_name = $2
+                """,
+                server_id, server_name
+            )
+
+    async def get_server(self, server_id: int) -> Dict:
+        async with self.pool.acquire() as conn:
+            server = await conn.fetchrow(
+                """
+                SELECT * FROM Servers WHERE server_id = $1
+                """,
+                server_id
+            )
+            return dict(server) if server else None
+
+    async def is_server_banned(self, server_id: int) -> bool:
+        async with self.pool.acquire() as conn:
+            is_banned = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM BannedServers WHERE server_id = $1
+                """,
+                server_id
+            )
+            return is_banned > 0
+
+    async def ban_server(self, server_id: int) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO BannedServers (server_id) VALUES ($1)
+                ON CONFLICT (server_id) DO NOTHING
+                """,
+                server_id
+            )
+
+    async def unban_server(self, server_id: int) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM BannedServers WHERE server_id = $1
+                """,
+                server_id
+            )
+
+    # Role Management
+    # ---------------
+
+    async def get_user_color(self, user_id: str) -> int:
+        async with self.pool.acquire() as conn:
+            user = await self.get_user(user_id)
+            role = await conn.fetchrow(
+                """
+                SELECT color FROM Roles WHERE name = $1
+                """,
+                user['role']
+            )
+            return int(role['color'][1:], 16) if role else 0
+
+    async def get_role_color(self, role: str) -> int:
+        async with self.pool.acquire() as conn:
+            role_data = await conn.fetchrow(
+                """
+                SELECT color FROM Roles WHERE name = $1
+                """,
+                role
+            )
+            return int(role_data['color'][1:], 16) if role_data else 0
+
+    async def get_user_role(self, user_id: str) -> str:
+        async with self.pool.acquire() as conn:
+            role = await conn.fetchval(
+                """
+                SELECT role FROM Users WHERE user_id = $1
+                """,
+                user_id
+            )
+            return role
+
+    # Utility Functions
+    # -----------------
+
+    async def compute_user_hash(self, user_id: str) -> str:
+        return hashlib.sha256(f"{self.global_salt}{user_id}".encode()).hexdigest()
+
+    async def update_user_nonce(self, user_id: str, nonce: int):
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE Users SET nonce = $1 WHERE user_id = $2
+                    """,
+                    nonce, user_id
+            )
+    
+    async def update_user_difficulty_penalty(self, user_id: str, penalty: float):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE Users SET difficulty_penalty = difficulty_penalty + $1 WHERE user_id = $2
+                """,
+                penalty, user_id
+            )
+
+    # Admin Management
+    # ----------------
+
+    async def add_admin(self, user_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO Admins (user_id) VALUES ($1)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                user_id
+            )
+
+    async def remove_admin(self, user_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM Admins WHERE user_id = $1
+                """,
+                user_id
+            )
+
+    async def is_admin(self, user_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            is_admin = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM Admins WHERE user_id = $1
+                """,
+                user_id
+            )
+            return is_admin > 0
+
+    # Channel List Management
+    # -----------------------
+
+    async def add_channel_to_list(self, channel_name: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO ChannelList (channel_name) VALUES ($1)
+                ON CONFLICT (channel_name) DO NOTHING
+                """,
+                channel_name
+            )
+
+    async def remove_channel_from_list(self, channel_name: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM ChannelList WHERE channel_name = $1
+                """,
+                channel_name
+            )
+
+    async def get_channel_list(self) -> List[str]:
+        async with self.pool.acquire() as conn:
+            channels = await conn.fetch(
+                """
+                SELECT channel_name FROM ChannelList
+                """
+            )
+            return [channel['channel_name'] for channel in channels]
+
+    # React Feature Management
+    # ------------------------
+
+    async def set_channel_react(self, channel_id: str, react: bool) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE Channels SET react = $1 WHERE channel_id = $2
+                """,
+                react, channel_id
+            )
+
+    async def get_channel_react(self, channel_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            react = await conn.fetchval(
+                """
+                SELECT react FROM Channels WHERE channel_id = $1
+                """,
+                channel_id
+            )
+            return react if react is not None else False
+
+    # Batch Operations
+    # ----------------
+
+    async def get_all_users(self) -> List[Dict]:
+        async with self.pool.acquire() as conn:
+            users = await conn.fetch(
+                """
+                SELECT * FROM Users
+                """
+            )
+            return [dict(user) for user in users]
+
+    async def get_all_banned_users(self) -> List[str]:
+        async with self.pool.acquire() as conn:
+            banned_users = await conn.fetch(
+                """
+                SELECT user_id FROM BannedUsers
+                """
+            )
+            return [user['user_id'] for user in banned_users]
+
+    async def get_all_banned_servers(self) -> List[int]:
+        async with self.pool.acquire() as conn:
+            banned_servers = await conn.fetch(
+                """
+                SELECT server_id FROM BannedServers
+                """
+            )
+            return [server['server_id'] for server in banned_servers]
+
+    # Statistics and Analytics
+    # ------------------------
+
+    async def get_user_message_count(self, user_id: str, time_range: Optional[int] = None) -> int:
+        async with self.pool.acquire() as conn:
+            if time_range:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM MessageHistory
+                    WHERE user_id = $1 AND timestamp > $2
+                    """,
+                    user_id, time.time() - time_range
+                )
+            else:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM MessageHistory
+                    WHERE user_id = $1
+                    """,
+                    user_id
+                )
+            return count
+
+    async def get_active_users(self, time_range: int) -> List[Dict]:
+        async with self.pool.acquire() as conn:
+            active_users = await conn.fetch(
+                """
+                SELECT user_id, COUNT(*) as message_count
+                FROM MessageHistory
+                WHERE timestamp > $1
+                GROUP BY user_id
+                ORDER BY message_count DESC
+                LIMIT 10
+                """,
+                time.time() - time_range
+            )
+            return [dict(user) for user in active_users]
+
+    async def get_channel_activity(self, channel_id: str, time_range: Optional[int] = None) -> int:
+        async with self.pool.acquire() as conn:
+            if time_range:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM MessageHistory
+                    WHERE message_link LIKE $1 AND timestamp > $2
+                    """,
+                    f"%{channel_id}%", time.time() - time_range
+                )
+            else:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM MessageHistory
+                    WHERE message_link LIKE $1
+                    """,
+                    f"%{channel_id}%"
+                )
+            return count
+
+    # Cleanup and Maintenance
+    # -----------------------
+
+    async def clear_old_messages(self, days: int) -> int:
+        async with self.pool.acquire() as conn:
+            deleted = await conn.fetchval(
+                """
+                DELETE FROM MessageHistory
+                WHERE timestamp < $1
+                RETURNING COUNT(*)
+                """,
+                time.time() - (days * 24 * 60 * 60)
+            )
+            return deleted
+
+    async def optimize_database(self):
+        async with self.pool.acquire() as conn:
+            await conn.execute("VACUUM ANALYZE")
+
+    # Configuration Management
+    # ------------------------
+
+    async def get_database_size(self) -> int:
+        async with self.pool.acquire() as conn:
+            size = await conn.fetchval(
+                """
+                SELECT pg_database_size(current_database())
+                """
+            )
+            return size
+
+# Additional utility functions outside the class
+
+async def create_tables(pool):
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS Users (
+                user_id VARCHAR(255) PRIMARY KEY,
+                hash VARCHAR(255) NOT NULL,
+                role VARCHAR(50) DEFAULT 'user',
+                profile_picture VARCHAR(255),
+                difficulty FLOAT DEFAULT 0,
+                difficulty_penalty FLOAT DEFAULT 0,
+                can_send_message BOOLEAN DEFAULT TRUE,
+                nonce INT DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS Channels (
+                channel_id VARCHAR(255) PRIMARY KEY,
+                server_id INT NOT NULL,
+                channel_category VARCHAR(255) NOT NULL,
+                react BOOLEAN DEFAULT FALSE
+            );
+
+            CREATE TABLE IF NOT EXISTS Usernames (
+                user_id VARCHAR(255) PRIMARY KEY,
+                name VARCHAR(255),
+                FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS MessageHistory (
+                hash VARCHAR(255) NOT NULL PRIMARY KEY,
+                message_link VARCHAR(255),
+                user_id VARCHAR(255),
+                timestamp FLOAT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS AttachmentHistory (
+                hash VARCHAR(255) NOT NULL PRIMARY KEY,
+                attachment_link VARCHAR(255),
+                user_id VARCHAR(255),
+                timestamp FLOAT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS TempCommandMessageHistory (
+                message_id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255),
+                content TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS Roles (
+                name VARCHAR(50) PRIMARY KEY,
+                color VARCHAR(7) NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS Admins (
+                user_id VARCHAR(255) PRIMARY KEY,
+                FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS Servers (
+                server_id INT PRIMARY KEY,
+                server_name VARCHAR(255) NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ChannelList (
+                channel_name VARCHAR(255) PRIMARY KEY
+            );
+
+            CREATE TABLE IF NOT EXISTS BannedServers (
+                server_id INT PRIMARY KEY
+            );
+
+            CREATE TABLE IF NOT EXISTS BannedUsers (
+                user_id VARCHAR(255) PRIMARY KEY
+            );
+
+        ''')
+
+async def initialize_database(config: WormholeConfig):
+    await config.initialize()
+    await create_tables(config.pool)
+
+    # Initialize roles
+    async with config.pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO Roles (name, color) VALUES ('admin', '#FF0000'), ('user', '#0000FF')
+            ON CONFLICT (name) DO NOTHING
+        ''')
         
-        async def send_message(channel_id):
-            channel = bot.get_channel(channel_id)
-            if channel:
-                await channel.send(embed=embed)
+        # Create users
+        jush = await config.compute_user_hash('706702251812716595')
+        jush_2 = await config.compute_user_hash('1190028762998378627')
+        gary = await config.compute_user_hash('1183924794593378360')
         
-        tasks = [send_message(int(channel_id)) for channel_id in channels]
-        await asyncio.gather(*tasks)
+        await conn.execute('''
+            INSERT INTO Users (user_id, hash, role) VALUES ('706702251812716595', $1, 'admin')
+            ON CONFLICT (user_id) DO UPDATE SET role = 'admin'
+        ''', jush)
+        await conn.execute('''
+            INSERT INTO Users (user_id, hash, role) VALUES ('1190028762998378627', $1, 'admin')
+            ON CONFLICT (user_id) DO UPDATE SET role = 'admin'
+        ''', jush_2)
+        await conn.execute('''
+            INSERT INTO Users (user_id, hash, role) VALUES ('1183924794593378360', $1, 'admin')
+            ON CONFLICT (user_id) DO UPDATE SET role = 'admin'
+        ''', gary)
+        
+        await conn.execute('''
+            INSERT INTO Admins (user_id) 
+            VALUES 
+                ('706702251812716595'),
+                ('1190028762998378627'),
+                ('1183924794593378360')
+            ON CONFLICT (user_id) DO NOTHING
+        ''')
 
-def load_config(config_path: str) -> WormholeConfig:
-    if not os.path.exists(config_path):
-        with open(config_path, 'w') as f:
-            json.dump(WormholeConfig().dict(), f, indent=4)
+        # Initialize channel list
+        channel_list = ['general', 'wormhole', 'happenings', 'qotd', 'memes', 'computers', 'finance', 'music', 'cats', 'spam-can', 'test']
+        for channel in channel_list:
+            await conn.execute('''
+                INSERT INTO ChannelList (channel_name) VALUES ($1)
+                ON CONFLICT (channel_name) DO NOTHING
+            ''', channel)
 
-    with open(config_path, 'r') as f:
-        config_data = json.load(f)
-    return WormholeConfig(**config_data)
-
-def save_config(config_path: str, config: WormholeConfig):
-    with open(config_path, 'w') as f:
-        config_dict = config.dict(exclude={"logger", "discord_token", "global_salt"})
-        json.dump(config_dict, f, indent=4)
-
-def compute_user_hash(config: WormholeConfig, user_id: int) -> str:
-    return hashlib.sha256(f"{config.global_salt}{user_id}".encode()).hexdigest()
-
-dummy_user_config = UserConfig(
-    hash="User hash not found"
-)
+if __name__ == "__main__":
+    config = WormholeConfig()
+    asyncio.run(initialize_database(config))

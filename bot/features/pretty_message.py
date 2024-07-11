@@ -8,15 +8,16 @@ class PrettyMessage:
     def __init__(self, config: WormholeConfig):
         self.config = config
     
-    def to_embed(self, 
-                 user_id: int, 
-                 display_name: str,
-                 avatar: str,
-                 message: str
+    async def to_embed( self, 
+                        user_id: int, 
+                        display_name: str,
+                        avatar: str,
+                        message: str
         ) -> discord.Embed:
 
-        user_color = self.config.get_user_color(user_id)
-        user_hash = self.config.get_user_hash(user_id)
+        user_id = str(user_id)
+        user_color = await self.config.get_user_color(user_id)
+        user_hash = await self.config.get_user_hash(user_id)
         embed = discord.Embed(
             description = message,
             color = user_color
@@ -85,3 +86,10 @@ class PrettyMessage:
         )
         console.print(message_panel)
         console.print()
+    
+    def format_mentions(self, mentions: list) -> str:
+        if not mentions:
+            return ""
+        
+        mention_strings = [f"<@{mention}>" for mention in mentions]
+        return " ".join(mention_strings)

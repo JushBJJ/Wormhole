@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Union, Optional
 import discord
 from discord.ext import commands
-from bot.config import ChannelConfig, WormholeConfig
+from bot.config import WormholeConfig
 
 def is_wormhole_admin():
     async def predicate(ctx):
@@ -13,7 +13,7 @@ def is_wormhole_admin():
             config: WormholeConfig = ctx.bot.config
             user_id: str = str(ctx.author.id)
 
-            if config.get_user_role(user_id) == "admin":
+            if await config.get_user_role(user_id) == "admin":
                 return True
 
             await ctx.send("You must be a Wormhole admin to run this command.")
@@ -22,6 +22,22 @@ def is_wormhole_admin():
             return False
 
     return commands.check(predicate)
+
+def user_exists_check():
+    async def predicate(cog: commands.Cog, ctx, user_id_or_hash: Union[int, str] = None):
+        if user_id_or_hash is None:
+            await ctx.send("Please provide a user ID or hash.")
+            return False
+
+        user_exists = await cog.config.user_exists(user_id_or_hash)
+        
+        if not user_exists:
+            await ctx.send(f"User `{user_id_or_hash}` does not exist.")
+            return False
+        return True
+    
+    return commands.check(lambda ctx: predicate(ctx.cog, ctx, ctx.args[2] if len(ctx.args) > 2 else None))
+
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
@@ -38,9 +54,8 @@ class AdminCommands(commands.Cog):
     @channel.command(name="add")
     async def add_channel(self, ctx, channel_name: str):
         """Add a new channel to the Wormhole network"""
-        if channel_name not in self.config.channel_list:
-            self.config.channel_list.append(channel_name)
-            self.config.channels[channel_name] = {str(ctx.channel.id): ChannelConfig()}
+        if await self.config.category_exists(channel_name):
+            await self.config.add_channel_to_list(channel_name)
             await ctx.send(f"Added channel {channel_name}")
         else:
             await ctx.send(f"Channel {channel_name} already exists")
@@ -48,9 +63,8 @@ class AdminCommands(commands.Cog):
     @channel.command(name="remove")
     async def remove_channel(self, ctx, channel_name: str):
         """Remove a channel from the Wormhole network"""
-        if channel_name in self.config.channel_list:
-            self.config.channel_list.remove(channel_name)
-            del self.config.channels[channel_name]
+        if await self.config.category_exists(channel_name):
+            await self.config.remove_channel_from_list(channel_name)
             await ctx.send(f"Removed channel {channel_name}")
         else:
             await ctx.send(f"Channel {channel_name} does not exist")
@@ -63,58 +77,50 @@ class AdminCommands(commands.Cog):
             await ctx.send("Invalid admin command. Use `help admin` for more information.")
 
     @admin.command(name="ban")
+    @user_exists_check()
     async def ban_user(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Ban a user from using the Wormhole bot"""
-        user_hash = self.config.get_user_hash(user_id_or_hash)
-        if user_hash not in self.config.banned_users:
-            self.config.banned_users.append(user_hash)
-            await ctx.send(f"Banned user `{user_hash}`")
+        if await self.config.is_user_banned(user_id_or_hash):
+            await self.config.ban_user(user_id_or_hash)
+            await ctx.send(f"Banned user `{user_id_or_hash}`")
         else:
-            await ctx.send(f"User `{user_hash}` is already banned")
+            await ctx.send(f"User `{user_id_or_hash}` is already banned")
 
     @admin.command(name="unban")
+    @user_exists_check()
     async def unban_user(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Unban a user from using the Wormhole bot"""
-        user_hash = self.config.get_user_hash(user_id_or_hash)
-        if user_hash in self.config.banned_users:
-            self.config.banned_users.remove(user_hash)
-            await ctx.send(f"Unbanned user `{user_hash}`")
+        if await self.config.is_user_banned(user_id_or_hash):
+            await self.config.unban_user(user_id_or_hash)
+            await ctx.send(f"Unbanned user `{user_id_or_hash}`")
         else:
-            await ctx.send(f"User `{user_hash}` is not banned")
+            await ctx.send(f"User `{user_id_or_hash}` is not banned")
 
     @admin.command(name="admin")
+    @user_exists_check()
     async def make_admin(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Add a new admin to the wormhole bot"""
-        user_hash = self.config.get_user_hash(user_id_or_hash)
-        user = self.config.get_user_config_by_hash(user_hash)
-        if user.role != "admin":
-            self.config.change_user_role(user_hash, "admin")
-            await ctx.send(f"{user_hash} is now a Wormhole Admin")
+        if await self.config.get_user_role(user_id_or_hash) != "admin":
+            await self.config.change_user_role(user_id_or_hash, "admin")
+            await ctx.send(f"{user_id_or_hash} is now a Wormhole Admin")
         else:
-            await ctx.send(f"{user_hash} is already a Wormhole Admin")
+            await ctx.send(f"{user_id_or_hash} is already a Wormhole Admin")
 
     @admin.command(name="unadmin")
+    @user_exists_check()
     async def remove_admin(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Remove admin status from a user"""
-        user_hash = self.config.get_user_hash(user_id_or_hash)
-        user = self.config.get_user_config_by_hash(user_hash)
-        if user.role != "user":
-            self.config.change_user_role(user_hash, "user")
-            await ctx.send(f"{user_hash} is no longer a Wormhole Admin")
+        if await self.config.get_user_role(user_id_or_hash) == "admin":
+            await self.config.change_user_role(user_id_or_hash, "user")
+            await ctx.send(f"{user_id_or_hash} is no longer a Wormhole Admin")
         else:
-            await ctx.send(f"{user_hash} is already a Wormhole User")
+            await ctx.send(f"{user_id_or_hash} is already a Wormhole User")
 
     @admin.command(name="reset_penalty")
+    @user_exists_check()
     async def reset_user_penalty(self, ctx, user_id_or_hash: Union[int, str] = None):
         """Reset the user's penalty"""
-        if user_id_or_hash is None:
-            user_id_or_hash = ctx.author.id
-        elif not user_id_or_hash.isdigit() and len(user_id_or_hash)==64:
-            user_id_or_hash = self.config.get_user_id_by_hash(user_id_or_hash)
-        else:
-            await ctx.send("Invalid user ID or hash")
-            return
-        self.config.reset_user_penalty(user_id_or_hash)
+        await self.config.reset_user_penalty(user_id_or_hash)
         await ctx.send("User penalty reset")
 
     @commands.group(case_insensitive=True)
@@ -127,7 +133,7 @@ class AdminCommands(commands.Cog):
     @broadcast.command(name="embed")
     async def broadcast_embed(self, ctx, channel_name: str, *, message: str):
         """Broadcast a message to all channels concurrently with embed"""
-        if channel_name not in self.config.channel_list:
+        if not await self.config.category_exists(channel_name):
             await ctx.send(f"Channel {channel_name} does not exist")
             return
         
@@ -149,10 +155,10 @@ class AdminCommands(commands.Cog):
     @broadcast.command(name="raw")
     async def broadcast_raw(self, ctx, channel_name: str, *, message: str):
         """Broadcast a raw message to a specific channel"""
-        if channel_name not in self.config.channel_list:
+        if not await self.config.category_exists(channel_name):
             await ctx.send(f"Channel {channel_name} does not exist")
             return
-        
+
         async def send_to_channel(channel_id):
             channel = self.bot.get_channel(int(channel_id))
             if channel:
