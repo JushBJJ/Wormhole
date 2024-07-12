@@ -11,3 +11,4 @@ setuptools
 debugpy
 google-generativeai
 asyncpg
+ollama

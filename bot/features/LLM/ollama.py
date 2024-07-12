@@ -1,14 +1,20 @@
-
+import asyncio
 import os
-from enum import Enum
+import discord
 import instructor
+import ollama
+from ollama import AsyncClient
 
 from typing import Any, Dict, List, Optional, Type, TypeVar
 from openai import AsyncOpenAI as OpenAI
 from pydantic import BaseModel, Field
 from bot.features.LLM.config import auto_find_command_prompt
+from bot.features.LLM.moderation.prompt import eval_prompt
 from bot.commands import admin, general, wormhole
 from discord.ext.commands import Command, Group
+from enum import Enum
+
+from services.discord import DiscordBot
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -17,7 +23,7 @@ class OllamaConfig(BaseModel):
     base_url: str = os.getenv("OLLAMA_BASE_URL", "")
     api_key: str = "yo mama so fat she can't even fit in the API key field"
     mode: instructor.Mode = instructor.Mode.JSON_SCHEMA
-    default_model: str = "llama3:8b-instruct-q6_K"
+    default_model: str = "mistral:7b-instruct-v0.3-q6_K"
     
 
 class AnyscaleConfig(BaseModel):
@@ -41,10 +47,10 @@ class OllamaLLM:
     async def generate_json(self, user_input: str, model: Optional[str] = None, response_schema: Optional[Type[T]] = None,  **kwargs) -> Any:
         messages = [m for m in kwargs.get("messages", [])]
         messages.append({"role": "user", "content": user_input})
-        response = await self.client.chat.completions.create(
+        client = self.client.client
+        response = await client.chat.completions.create(
             model=model or self.config.default_model,
-            messages=messages,
-            response_model=response_schema
+            messages=messages
         )
         return response
     
@@ -94,3 +100,19 @@ async def get_closest_command(user_input: str, user_role: str, user_id: int, com
     prompt = auto_find_command_prompt(user_input, user_role, user_id, commands)
     response = await ollama.generate_json(prompt, response_schema=get_command_schema)
     return response
+
+async def moderate_channel(bot: DiscordBot, message: discord.Message, messages: dict, config=OllamaConfig()):
+    tasks = set()
+    new_messages = messages.copy()
+    for channel, msgs in messages.items():
+        bot.logger.info(f"{channel}: {len(msgs)}")
+        if len(msgs) >= 5:
+            prompt = eval_prompt(channel, msgs)
+            msg = [{"role": "user", "content": prompt}]
+            tasks.add(AsyncClient(host="http://ollama:11434").chat(model="mistral:7b-instruct-v0.3-q6_K", messages=msg, format="json"))
+            new_messages.pop(channel)
+    responses = await asyncio.gather(*tasks)
+    messages.clear()
+    messages.update(new_messages)
+    bot.logger.info(responses)
+    # TODO Auto-mute/ban

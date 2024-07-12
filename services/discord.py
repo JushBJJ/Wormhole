@@ -23,13 +23,21 @@ class DiscordBot(commands.Bot):
         self.pretty_message = PrettyMessage(config)
         self.pow_handler = PoWHandler(config, self)
         self.message_hashes = {}
+        self.last_messages = {} # Last overall 50 messages, seperated by channel and user
 
+    async def _setup_last_messages_dict(self) -> None:
+        channel_categories: list[str] = await self.config.get_channel_list()
+        self.last_messages = {category: set() for category in channel_categories}
+        
     async def setup_hook(self) -> None:
         self.logger.info("Setting up bot...")
         await self.load_extensions()
         self.logger.info("Extensions loaded successfully.")
         self.add_listener(self.before_message, "on_message")
         self.before_invoke(self.before_command)
+        self.logger.info("Before-invoke functions set.")
+        await self._setup_last_messages_dict()
+        self.logger.info("Last messages dict set up.")
 
     async def before_message(self, message: discord.Message) -> None:
         if message.author == self.user:
@@ -101,7 +109,7 @@ class DiscordBot(commands.Bot):
         else:
             self.logger.error(f"Command error: {str(error)}")
             self.logger.error(traceback.format_exc())
-            user_config = await self.config.get_user(ctx.author.id)
+            user_config = await self.config.get_user(str(ctx.author.id))
             
             if user_config['difficulty'] > 1:
                 embed = create_embed(description=f"Error: `{str(error)}`")

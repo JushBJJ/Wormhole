@@ -1,51 +1,6 @@
 version: "3.8"
 
 services:
-  discord-bot-prod:
-    container_name: wormhole-bot-prod
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: wormhole-bot:latest
-    volumes:
-      - .:/app
-      - ssd-data:/mnt/ExtremeSSD/Wormhole
-    env_file:
-      - .env
-    networks:
-      - wormhole-network
-    depends_on:
-      - postgres-prod
-    restart: always
-    command: ["python", "run_discord.py"]
-
-  postgres-prod:
-    image: postgres:13
-    container_name: wormhole-postgres-prod
-    env_file:
-      - .env
-    volumes:
-      - /mnt/ExtremeSSD/Wormhole/database/postgres:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - wormhole-network
-    ports:
-      - "5432:5432"
-
-  pgadmin-prod:
-    image: dpage/pgadmin4
-    container_name: wormhole-pgadmin-prod
-    env_file:
-      - .env
-    volumes:
-      - /mnt/ExtremeSSD/Wormhole/database/pgadmin:/var/lib/pgadmin
-    networks:
-      - wormhole-network
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres-prod
-
   discord-bot-debug:
     container_name: wormhole-bot-debug
     build:
@@ -63,6 +18,7 @@ services:
       - "5678:5678"
     depends_on:
       - postgres-debug
+      - ollama
     restart: always
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
 
@@ -93,22 +49,32 @@ services:
     depends_on:
       - postgres-debug
 
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    volumes:
+      - /mnt/ExtremeSSD/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - wormhole-network-dev
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  wormhole-network-dev:
+    driver: bridge
+
 volumes:
-  ssd-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /mnt/ExtremeSSD/Wormhole
   ssd-data-dev:
     driver: local
     driver_opts:
       type: none
       o: bind
       device: /mnt/ExtremeSSD/Wormhole/dev
-
-networks:
-  wormhole-network:
-    driver: bridge
-  wormhole-network-dev:
-    driver: bridge
+  ollama:
