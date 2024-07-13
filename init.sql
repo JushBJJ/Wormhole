@@ -38,13 +38,11 @@ CREATE TABLE AttachmentHistory (
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 );
 
-CREATE TABLE TempCommandMessageHistory (
-    message_id SERIAL PRIMARY KEY,
-    user_id VARCHAR(255),
-    content TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+CREATE TABLE dataset (
+    id VARCHAR(255) PRIMARY KEY,
+    predicted TEXT,
+    actual TEXT
 );
-
 CREATE TABLE Roles (
     name VARCHAR(50) NOT NULL PRIMARY,
     color VARCHAR(7) NOT NULL
