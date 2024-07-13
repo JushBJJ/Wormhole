@@ -1,17 +1,19 @@
 import asyncio
+import hashlib
 import os
 import discord
 import instructor
 import ollama
 from ollama import AsyncClient
 
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar
 from openai import AsyncOpenAI as OpenAI
 from pydantic import BaseModel, Field
 from bot.features.LLM.config import auto_find_command_prompt
 from bot.features.LLM.moderation.prompt import eval_prompt
 from bot.commands import admin, general, wormhole
 from discord.ext.commands import Command, Group
+from discord.ui import Button, View, Modal, TextInput
 from enum import Enum
 
 from services.discord import DiscordBot
@@ -60,6 +62,20 @@ class moderation_schema(BaseModel):
     useless_probability: int = Field(..., ge=0, le=10, description="The probability of the user wasting time")
     ban_probability: int = Field(..., ge=0, le=10, description="The probability that the user should be banned")
 
+class CorrectionModal(Modal):
+    def __init__(self, bot, hash_id):
+        super().__init__(title="Provide Correct Response")
+        self.bot = bot
+        self.hash_id = hash_id
+        self.correct_response = TextInput(label="Correct Response", style=discord.TextStyle.paragraph)
+        self.add_item(self.correct_response)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.bot.evaluations[self.hash_id]["correct_response"] = self.correct_response.value
+        hash_id, predicted, actual = _process_evaluation(self.hash_id, self.bot.evaluations[self.hash_id])
+        await self.bot.config.add_data(hash_id, predicted, actual)
+        await interaction.response.send_message("Correct response recorded. Thank you!", ephemeral=True)
+
 def generate_command_enum():
     commands = {}
     sub_commands = {}
@@ -101,18 +117,93 @@ async def get_closest_command(user_input: str, user_role: str, user_id: int, com
     response = await ollama.generate_json(prompt, response_schema=get_command_schema)
     return response
 
-async def moderate_channel(bot: DiscordBot, message: discord.Message, messages: dict, config=OllamaConfig()):
+def _format_message(msgs: List[str]) -> str:
+    return "\n".join(
+        f"{k}: {v}" for m in msgs
+        for k, v in {
+            "Time since last message": m[2],
+            m[1]: m[0]
+        }.items()
+    )
+
+def _process_evaluation(hash_id: int, evaluation: dict) -> Tuple[str, str, str]:
+    if evaluation["result"] == "Yes":
+        actual = [{"role": "user", "content": evaluation["prompt"]}, {"role": "assistant", "content": evaluation["response"]}]
+        predicted = actual
+    elif evaluation["result"] == "No":
+        actual = [{"role": "user", "content": evaluation["prompt"]}, {"role": "assistant", "content": evaluation["correct_response"]}]
+        predicted = [{"role": "user", "content": evaluation["prompt"]}, {"role": "assistant", "content": evaluation["response"]}]
+    return str(hash_id), str(predicted), str(actual)
+
+async def moderate_channel(bot: DiscordBot, message: discord.Message, messages: Dict[str, Set[str]], config=OllamaConfig()):
     tasks = set()
+    prompts = set()
+    msgs_list = set()
     new_messages = messages.copy()
     for channel, msgs in messages.items():
         bot.logger.info(f"{channel}: {len(msgs)}")
         if len(msgs) >= 5:
             prompt = eval_prompt(channel, msgs)
+            msgs_list.add(_format_message(msgs))
             msg = [{"role": "user", "content": prompt}]
+            prompts.add(msg[0]["content"])
             tasks.add(AsyncClient(host="http://ollama:11434").chat(model="mistral:7b-instruct-v0.3-q6_K", messages=msg, format="json"))
-            new_messages.pop(channel)
+            new_messages[channel] = set()
     responses = await asyncio.gather(*tasks)
     messages.clear()
     messages.update(new_messages)
     bot.logger.info(responses)
-    # TODO Auto-mute/ban
+
+    user = await bot.fetch_user(os.getenv("OWNER_ID", 0))
+    eval_tasks = set()
+    
+    for r, prompt, msg in zip(responses, prompts, msgs_list):
+        view = View()
+        view.add_item(Button(style=discord.ButtonStyle.success, label="Yes", custom_id="Yes"))
+        view.add_item(Button(style=discord.ButtonStyle.danger, label="No", custom_id="No"))
+        view.add_item(Button(style=discord.ButtonStyle.secondary, label="Skip", custom_id="Skip"))
+        
+        response = r["message"]["content"]
+        content = f"# Messages\n```{msg[:1800]}```\n# Response:\n```{response}```"
+        content = content[:2000]
+        hashed_content = hash(content)
+        bot.evaluations[hashed_content] = {
+            "content": content,
+            "prompt": prompt,
+            "response": response
+        }
+        eval_tasks.add(user.send(content=content, view=view))
+    
+    await asyncio.gather(*eval_tasks)
+
+    @bot.event
+    async def on_interaction(interaction: discord.Interaction):
+        if interaction.type == discord.InteractionType.component:
+            custom_id = interaction.data["custom_id"]
+            message_content = interaction.message.content
+            hash_id = hash(message_content)
+            
+            if hash_id in bot.evaluations:
+                evaluation = bot.evaluations[hash_id]
+                new_view = View()
+                for button in interaction.message.components[0].children:
+                    new_button = Button(
+                        style=button.style,
+                        label=button.label,
+                        custom_id=button.custom_id,
+                        disabled=True
+                    )
+                    new_view.add_item(new_button)
+                
+                if custom_id == "Yes":
+                    evaluation["result"] = "Yes"
+                    hash_id, predicted, actual = _process_evaluation(hash_id, evaluation)
+                    await bot.config.add_data(hash_id, predicted, actual)
+                    await interaction.response.send_message("Evaluation recorded: Yes", ephemeral=True)
+                elif custom_id == "No":
+                    evaluation["result"] = "No"
+                    await interaction.response.send_modal(CorrectionModal(bot, hash_id))
+                elif custom_id == "Skip":
+                    evaluation["result"] = "Skip"
+                    await interaction.response.send_message("Evaluation skipped", ephemeral=True)
+                await interaction.message.edit(view=new_view)

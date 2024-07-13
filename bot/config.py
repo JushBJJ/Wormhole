@@ -247,36 +247,17 @@ class WormholeConfig:
                 hashed_content, attachment_link, user_id, time.time()
             )
 
-    async def add_temp_command_message(self, user_id: str, content: str):
+    async def add_data(self, hash: str, predicted: str, actual: str):
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO TempCommandMessageHistory (user_id, content)
-                VALUES ($1, $2)
+                INSERT INTO dataset (id, predicted, actual)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (id) DO UPDATE SET
+                predicted = $2,
+                actual = $3
                 """,
-                user_id, content
-            )
-
-    async def get_temp_command_messages(self, user_id: str) -> List[str]:
-        async with self.pool.acquire() as conn:
-            messages = await conn.fetch(
-                """
-                SELECT content FROM TempCommandMessageHistory
-                WHERE user_id = $1
-                ORDER BY message_id
-                """,
-                user_id
-            )
-            return [message['content'] for message in messages]
-
-    async def clear_temp_command_messages(self, user_id: str):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                DELETE FROM TempCommandMessageHistory
-                WHERE user_id = $1
-                """,
-                user_id
+                hash, predicted, actual
             )
 
     async def get_message_hash_by_link(self, message_link):

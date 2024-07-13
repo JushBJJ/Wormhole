@@ -24,6 +24,7 @@ class DiscordBot(commands.Bot):
         self.pow_handler = PoWHandler(config, self)
         self.message_hashes = {}
         self.last_messages = {} # Last overall 50 messages, seperated by channel and user
+        self.evaluations = {}
 
     async def _setup_last_messages_dict(self) -> None:
         channel_categories: list[str] = await self.config.get_channel_list()
