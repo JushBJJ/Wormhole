@@ -37,13 +37,28 @@
     ],
     "users": {
         "706702251812716595": {
-            "uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-            "role": "admin"
-        },
-        "1190028762998378627": {
-            "uuid": "550e8400-e29b-41d4-a716-446655440000",
-            "role": "moderator"
-        }
+            "hash": "91b81c881e0d2eb8d087afc3cc9c870a558d7c3addf112050a094a1cc5b15380",
+            "role": "admin",
+            "names": [
+                "Jush"
+            ],
+            "profile_picture": "https://cdn.discordapp.com/avatars/706702251812716595/0abc790bc1d515dbd301b1e2e7237cbe.png?size=1024",
+            "message_history": [
+                {
+                    "timestamp": 1720082765.1305442,
+                    "hash": "e677704046c576b25a8e26eea6856c57095d69527b6bfbd42771425be8d4fe2c"
+                }
+            ],
+            "temp_command_message_history": [
+                {
+                    "role": "assistant",
+                    "content": "The input 'chuck' is quite far from any known command, but since you are an admin, we will give it a chance to execute."
+                }
+            ],
+            "difficulty": 0.31602021328485524,
+            "difficulty_penalty": 0.2,
+            "can_send_message": true,
+            "nonce": 301
     },
     "roles": {
         "admin": {

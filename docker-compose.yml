@@ -51,7 +51,7 @@ services:
 
   ollama:
     image: ollama/ollama
-    container_name: ollama
+    container_name: ollama-debug
     volumes:
       - /mnt/ExtremeSSD/ollama:/root/.ollama
     ports:

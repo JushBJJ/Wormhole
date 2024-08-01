@@ -31,7 +31,7 @@ class DiscordBot(commands.Bot):
         self.last_messages = {category: set() for category in channel_categories}
         
     async def setup_hook(self) -> None:
-        self.logger.info("Setting up bot...")
+        self.logger.info("Setting up bot...")        
         await self.load_extensions()
         self.logger.info("Extensions loaded successfully.")
         self.add_listener(self.before_message, "on_message")
@@ -116,7 +116,7 @@ class DiscordBot(commands.Bot):
                 embed = create_embed(description=f"Error: `{str(error)}`")
                 await ctx.send(embed=embed)
             
-            user_role = await self.config.get_user_role(ctx.author.id)
+            user_role = await self.config.get_user_role(str(ctx.author.id))
             response = await get_closest_command(
                 user_input = ctx.message.content,
                 user_role = user_role,
