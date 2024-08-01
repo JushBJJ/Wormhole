@@ -1,63 +1,63 @@
 version: "3.8"
 
 services:
-  discord-bot-debug:
-    container_name: wormhole-bot-debug
+  discord-bot:
+    container_name: wormhole-bot
     build:
       context: .
       dockerfile: Dockerfile.debug
     image: wormhole-bot:debug
     volumes:
       - .:/app
-      - ssd-data-dev:/mnt/ExtremeSSD/Wormhole/dev
+      - ssd-data:/mnt/ExtremeSSD/Wormhole/dev
     env_file:
-      - .env_dev
+      - .env
     networks:
-      - wormhole-network-dev
+      - wormhole-network
     ports:
       - "5678:5678"
     depends_on:
-      - postgres-debug
+      - postgres
       - ollama
     restart: always
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
 
-  postgres-debug:
+  postgres:
     image: postgres:latest
-    container_name: wormhole-postgres-debug
+    container_name: wormhole-postgres
     env_file:
       - .env_dev
     volumes:
       - /mnt/ExtremeSSD/Wormhole/dev/database/postgres:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - wormhole-network-dev
+      - wormhole-network
     ports:
       - "5433:5432"
 
-  pgadmin-debug:
+  pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: wormhole-pgadmin-debug
+    container_name: wormhole-pgadmin
     env_file:
       - .env_dev
     volumes:
       - /mnt/ExtremeSSD/Wormhole/dev/database/pgadmin:/var/lib/pgadmin
     networks:
-      - wormhole-network-dev
+      - wormhole-network
     ports:
       - "5051:80"
     depends_on:
-      - postgres-debug
+      - postgres
 
   ollama:
     image: ollama/ollama
-    container_name: ollama-debug
+    container_name: ollama
     volumes:
       - /mnt/ExtremeSSD/ollama:/root/.ollama
     ports:
       - "11434:11434"
     networks:
-      - wormhole-network-dev
+      - wormhole-network
     deploy:
       resources:
         reservations:
@@ -67,11 +67,11 @@ services:
               capabilities: [gpu]
 
 networks:
-  wormhole-network-dev:
+  wormhole-network:
     driver: bridge
 
 volumes:
-  ssd-data-dev:
+  ssd-data:
     driver: local
     driver_opts:
       type: none

@@ -108,7 +108,7 @@ class EventHandlers(commands.Cog):
             # Handle temporary message and LLM moderation
             channel_category = channel_config["channel_category"]
             self.bot.last_messages[channel_category].add((message.content, user_hash, time.time()))
-            await moderate_channel(self.bot, message, self.bot.last_messages,)
+            #await moderate_channel(self.bot, message, self.bot.last_messages,)
 
     async def send_startup_message(self):
         channels = await self.bot.config.get_all_channels()

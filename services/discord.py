@@ -61,7 +61,7 @@ class DiscordBot(commands.Bot):
             return
         if await self.config.is_user_banned(str(ctx.author.id)):
             raise commands.CheckFailure()
-        success, result = await self.pow_handler.check_pow(ctx.message, ctx.message.content, ctx.author.id, ctx.channel.id)
+        success, result, _ = await self.pow_handler.check_pow(ctx.message, ctx.message.content, ctx.author.id, ctx.channel.id)
         if not success:
             return # User failed PoW check
         if isinstance(result, list):  

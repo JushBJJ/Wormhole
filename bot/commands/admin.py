@@ -142,14 +142,13 @@ class AdminCommands(commands.Cog):
             description=message,
             color=discord.Color.red()
         )
-        embed.set_thumbnail(url=ctx.bot.user.display_avatar.url)
 
-        async def send_to_channel(channel_id):
-            channel = self.bot.get_channel(int(channel_id))
+        async def send_to_channel(channel):
+            channel = self.bot.get_channel(int(channel["channel_id"]))
             if channel:
                 await channel.send(embed=embed)
 
-        tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
+        tasks = [send_to_channel(channel) for channel in await self.config.get_channels_by_category(channel_name)]
         await asyncio.gather(*tasks)
 
     @broadcast.command(name="raw")
@@ -159,12 +158,12 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"Channel {channel_name} does not exist")
             return
 
-        async def send_to_channel(channel_id):
-            channel = self.bot.get_channel(int(channel_id))
+        async def send_to_channel(channel):
+            channel = self.bot.get_channel(int(channel["channel_id"]))
             if channel:
                 await channel.send(message)
         
-        tasks = [send_to_channel(channel_id) for channel_id in self.config.channels[channel_name]]
+        tasks = [send_to_channel(channel) for channel in await self.config.get_channels_by_category(channel_name)]
         await asyncio.gather(*tasks)
 
 async def setup(bot):
