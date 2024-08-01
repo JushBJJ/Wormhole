@@ -23,7 +23,6 @@ class GeneralCommands(commands.Cog):
 
     async def show_all_help(self, ctx):
         embed = discord.Embed(title="Wormhole Bot Help", color=discord.Color.blue())
-        embed.set_thumbnail(url=self.bot.user.avatar.url)
         embed.description = f"Use `{ctx.prefix}help <command>` for more info on a command.\n" \
                             f"Use `{ctx.prefix}help <category>` for more info on a category."
 

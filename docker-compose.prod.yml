@@ -1,0 +1,82 @@
+version: "3.8"
+
+services:
+  discord-bot-prod:
+    container_name: wormhole-bot-prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wormhole-bot:prod
+    volumes:
+      - .:/app
+      - ssd-data:/mnt/ExtremeSSD/Wormhole/
+    env_file:
+      - .env
+    networks:
+      - wormhole-network
+    ports:
+      - "5678:5679"
+    depends_on:
+      - postgres-prod
+      - ollama
+    restart: always
+    command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5679", "--wait-for-client", "run_discord.py"]
+
+  postgres-prod:
+    image: postgres:latest
+    container_name: wormhole-postgres-prod
+    user: root
+    env_file:
+      - .env
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/database/postgres:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - wormhole-network
+    ports:
+      - "5433:5432"
+
+  pgadmin-prod:
+    image: dpage/pgadmin4:latest
+    container_name: wormhole-pgadmin-prod
+    user: root
+    env_file:
+      - .env
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/database/pgadmin:/var/lib/pgadmin
+    networks:
+      - wormhole-network
+    ports:
+      - "5051:80"
+    depends_on:
+      - postgres-prod
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama-prod
+    volumes:
+      - /mnt/ExtremeSSD/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - wormhole-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  wormhole-network:
+    driver: bridge
+
+volumes:
+  ssd-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/ExtremeSSD/Wormhole/
+  ollama:

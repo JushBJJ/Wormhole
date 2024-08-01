@@ -1,10 +1,3 @@
-import asyncpg
-import os
-import json
-
-import dotenv
-dotenv.load_dotenv(dotenv_path=".env_dev")
-
 async def convert(json_txt, config):
     config_json = json_txt
 

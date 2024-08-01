@@ -91,5 +91,5 @@ class PrettyMessage:
         if not mentions:
             return ""
         
-        mention_strings = [f"<@{mention}>" for mention in mentions]
+        mention_strings = [f"<@{mention}>" for mention in mentions if mention not in ["here", "everyone"]]
         return " ".join(mention_strings)
