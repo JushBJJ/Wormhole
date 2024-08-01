@@ -11,6 +11,7 @@ async def main():
 
     config = WormholeConfig()
     await initialize_database(config)
+    
     discord_bot = DiscordBot(config)
     tox_service = ToxService(config)
     
