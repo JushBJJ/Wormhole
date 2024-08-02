@@ -21,12 +21,27 @@
             "justMyCode": false
         },
         {
-            "name": "Discord Bot Docker: Attach",
+            "name": "Discord Bot Docker: Attach (PROD)",
             "type": "debugpy",
             "request": "attach",
             "connect": {
                 "host": "localhost",
                 "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/app"
+                }
+            ]
+        },
+        {
+            "name": "Discord Bot Docker: Attach (DEV)",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5679
             },
             "pathMappings": [
                 {

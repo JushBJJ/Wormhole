@@ -91,10 +91,14 @@ class EventHandlers(commands.Cog):
                     send_kwargs = {
                         'embed': embed, 
                         "reference": reply_to, 
+                    }
+                    tasks.append(channel.send(**send_kwargs))
+                    # Send another but for stickers and content
+                    send_kwargs_2 = {
                         "stickers": stickers_to_send,
                         "content": attachments + sticker_content + mentions if attachments or sticker_content or mentions else None
                     }
-                    tasks.append(channel.send(**send_kwargs))
+                    tasks.append(channel.send(**send_kwargs_2))
                     if message.embeds and not (attachments or embeds):
                         tasks.append(channel.send(embed=message.embeds[0]))
                     if embeds:
