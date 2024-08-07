@@ -534,7 +534,7 @@ class WormholeConfig:
         async with self.pool.acquire() as conn:
             channel = await conn.fetchval(
                 """
-                SELECT channel_category FROM Channels WHERE cghannel_id = $1
+                SELECT channel_category FROM Channels WHERE channel_id = $1
                 """,
                 channel_id
             )
