@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from functools import wraps
 from convert_config_to_sql import convert
 
@@ -69,6 +69,16 @@ class WormholeConfig:
                     user_id, user_hash
                 )
             return dict(user)
+
+    async def get_user_usernames(self, user_id: str) -> List[str]:
+        async with self.pool.acquire() as conn:
+            usernames = await conn.fetch(
+                """
+                SELECT name FROM Usernames WHERE user_id = $1
+                """,
+                user_id
+            )
+            return usernames
 
     # --- Old Functions ---
     async def _old_add_user(self, user_config: dict):
@@ -234,7 +244,7 @@ class WormholeConfig:
             await conn.execute(
                 """
                 INSERT INTO Usernames (user_id, name) VALUES ($1, $2)
-                ON CONFLICT (user_id) DO NOTHING
+                ON CONFLICT (user_id, name) DO NOTHING
                 """,
                 user_id, name
             )

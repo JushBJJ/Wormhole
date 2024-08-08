@@ -20,9 +20,11 @@ CREATE TABLE Users (
 
 -- Create Usernames table
 CREATE TABLE Usernames (
-    user_id VARCHAR(255) PRIMARY KEY,
+    id SERIAL PRIMARY KEY NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     name VARCHAR(255),
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+    UNIQUE (user_id, name)
 );
 
 -- Create MessageHistory table

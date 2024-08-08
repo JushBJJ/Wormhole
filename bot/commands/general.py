@@ -1,5 +1,4 @@
 import discord
-from typing import Union, Optional
 from discord.ext import commands
 from bot.config import WormholeConfig
 
@@ -113,15 +112,17 @@ class GeneralCommands(commands.Cog):
             await ctx.send(f"An error occurred: {str(e)}")
 
     async def create_user_embed(self, user_config):
-        description = f"Names: **{str(user_config['names'])}**\n" \
-                      f"Role: **{user_config['role']}**\n" \
-                      f"Hash: **{user_config['hash']}**"
+        usernames = await self.config.get_user_usernames(user_config.get('user_id', ''))
+        names = ", ".join([username[0] for username in usernames])
+        description = f"Names: **{names}**\n" \
+                      f"Role: **{user_config.get('role', 'None')}**\n" \
+                      f"Hash: **{user_config.get('hash', 'None')}**\n" 
         embed = discord.Embed(
             title="User Information",
             description=description,
-            color=await self.config.get_role_color(user_config['role'])
+            color=await self.config.get_role_color(user_config.get('role', 'user'))
         )
-        embed.set_image(url=user_config['profile_picture'])
+        embed.set_image(url=user_config.get('profile_picture', ''))
         embed.set_footer(text="Missing info means not registered yet")
         return embed
 
