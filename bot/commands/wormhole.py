@@ -1,5 +1,4 @@
-from typing import Optional, Union
-from discord import NotFound
+from typing import Optional
 from discord.ext import commands
 from bot.config import WormholeConfig
 from bot.commands.admin import is_wormhole_admin
@@ -63,7 +62,7 @@ class WormholeCommands(commands.Cog):
 
     @pow.command(name="reset_difficulty")
     @is_wormhole_admin()
-    async def reset_user_difficulty(self, ctx, user_id_or_hash: Optional[Union[int, str]] = None):
+    async def reset_user_difficulty(self, ctx, user_id_or_hash: Optional[str] = None):
         """Reset the user's difficulty"""
         if user_id_or_hash is None:
             user_id_or_hash = str(ctx.author.id)
@@ -71,7 +70,7 @@ class WormholeCommands(commands.Cog):
         await ctx.send("User difficulty reset")
 
     @pow.command(name="pow_status")
-    async def pow_status(self, ctx, user_id_or_hash: Optional[Union[int, str]] = None):
+    async def pow_status(self, ctx, user_id_or_hash: Optional[str] = None):
         """Get the current PoW status for the user"""
         if user_id_or_hash is None:
             user_id_or_hash = str(ctx.author.id)

@@ -5,7 +5,6 @@ from discord.ext import commands
 from bot.config import WormholeConfig
 
 import hashlib
-import time
 
 class PoWHandler:
     def __init__(self, config: WormholeConfig, ctx: commands.Bot):
