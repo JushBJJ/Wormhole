@@ -1,5 +1,4 @@
 import asyncio
-from typing import List, Union, Optional
 import discord
 from discord.ext import commands
 from bot.config import WormholeConfig
@@ -22,21 +21,6 @@ def is_wormhole_admin():
             return False
 
     return commands.check(predicate)
-
-def user_exists_check():
-    async def predicate(cog: commands.Cog, ctx, user_id_or_hash: Union[int, str] = None):
-        if user_id_or_hash is None:
-            await ctx.send("Please provide a user ID or hash.")
-            return False
-
-        user_exists = await cog.config.user_exists(user_id_or_hash)
-        
-        if not user_exists:
-            await ctx.send(f"User `{user_id_or_hash}` does not exist.")
-            return False
-        return True
-    
-    return commands.check(lambda ctx: predicate(ctx.cog, ctx, ctx.args[2] if len(ctx.args) > 2 else None))
 
 
 class AdminCommands(commands.Cog):
@@ -77,8 +61,7 @@ class AdminCommands(commands.Cog):
             await ctx.send("Invalid admin command. Use `help admin` for more information.")
 
     @admin.command(name="ban")
-    @user_exists_check()
-    async def ban_user(self, ctx, user_id_or_hash: Union[int, str] = None):
+    async def ban_user(self, ctx, user_id_or_hash: str = None):
         """Ban a user from using the Wormhole bot"""
         if await self.config.is_user_banned(user_id_or_hash):
             await self.config.ban_user(user_id_or_hash)
@@ -87,8 +70,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"User `{user_id_or_hash}` is already banned")
 
     @admin.command(name="unban")
-    @user_exists_check()
-    async def unban_user(self, ctx, user_id_or_hash: Union[int, str] = None):
+    async def unban_user(self, ctx, user_id_or_hash: str = None):
         """Unban a user from using the Wormhole bot"""
         if await self.config.is_user_banned(user_id_or_hash):
             await self.config.unban_user(user_id_or_hash)
@@ -97,8 +79,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"User `{user_id_or_hash}` is not banned")
 
     @admin.command(name="admin")
-    @user_exists_check()
-    async def make_admin(self, ctx, user_id_or_hash: Union[int, str] = None):
+    async def make_admin(self, ctx, user_id_or_hash: str = None):
         """Add a new admin to the wormhole bot"""
         if await self.config.get_user_role(user_id_or_hash) != "admin":
             await self.config.change_user_role(user_id_or_hash, "admin")
@@ -107,8 +88,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"{user_id_or_hash} is already a Wormhole Admin")
 
     @admin.command(name="unadmin")
-    @user_exists_check()
-    async def remove_admin(self, ctx, user_id_or_hash: Union[int, str] = None):
+    async def remove_admin(self, ctx, user_id_or_hash: str = None):
         """Remove admin status from a user"""
         if await self.config.get_user_role(user_id_or_hash) == "admin":
             await self.config.change_user_role(user_id_or_hash, "user")
@@ -117,8 +97,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"{user_id_or_hash} is already a Wormhole User")
 
     @admin.command(name="reset_penalty")
-    @user_exists_check()
-    async def reset_user_penalty(self, ctx, user_id_or_hash: Union[int, str] = None):
+    async def reset_user_penalty(self, ctx, user_id_or_hash: str = None):
         """Reset the user's penalty"""
         await self.config.reset_user_penalty(user_id_or_hash)
         await ctx.send("User penalty reset")

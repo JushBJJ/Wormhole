@@ -83,18 +83,19 @@ class GeneralCommands(commands.Cog):
         await ctx.invoke(self.bot.get_command('help'), command='user')
 
     @user.command(name="info")
-    async def get_user(self, ctx, user_id_or_hash: Optional[Union[str, int]] = None):
+    async def get_user(self, ctx, user_id_or_hash: str = None):
         """Get user information by ID or hash"""
+        author_id = str(ctx.author.id)
         if user_id_or_hash is None:
-            user_id_or_hash = ctx.author.id
+            user_id_or_hash = author_id
 
         try:
             try:
-                user_id = int(user_id_or_hash)
-                user_config = await self.config.get_user(user_id)
+                _ = int(user_id_or_hash)
+                user_config = await self.config.get_user(user_id_or_hash)
                 send_method = ctx.author.send
                 
-                if await self.config.get_user_role(ctx.author.id) != "admin" and ctx.author.id != user_id:
+                if await self.config.get_user_role(author_id) != "admin" and author_id != user_id_or_hash:
                     await ctx.send("You must be a Wormhole admin to view user information by ID.")
                     return
             except ValueError:

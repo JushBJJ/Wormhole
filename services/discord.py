@@ -1,4 +1,3 @@
-from typing import Union
 from discord.ext import commands, tasks
 from bot.config import WormholeConfig
 from bot.utils.logging import setup_logging
