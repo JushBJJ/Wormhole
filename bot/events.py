@@ -104,8 +104,20 @@ class EventHandlers(commands.Cog):
                     if embeds:
                         tasks.append(channel.send(content=embeds))
 
-            messages = await asyncio.gather(*tasks)
-            message_links = [message.jump_url for message in messages]
+            real_messages = []
+            # Split the success and error message
+            messages = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in messages:
+                if isinstance(result, discord.Message):
+                    real_messages.append(result)
+                elif isinstance(result, Exception):
+                    # URL('https://discord.com/api/v10/channels/<channel_id>/messages')
+                    if result.status == 403: # Forbidden
+                        self.bot.logger.error(f"Error sending message to channel: {result.response.url.parts[4]}. Removing...")
+                        await self.bot.config.remove_channel(result.response.url.parts[4])
+                    else:
+                        self.bot.logger.error(f"Error sending message: {result}")
+            message_links = [message.jump_url for message in real_messages]
             await self.bot.config.append_link(message_hash, message_links)
             await self.handle_config_post(channel_config, message)
             
@@ -126,6 +138,7 @@ class EventHandlers(commands.Cog):
     async def handle_config_post(self, channel_config: dict, message: discord.Message):
         if channel_config["react"]:
             await message.add_reaction('✅')
+            await message.remove_reaction('⏳', self.bot.user)
 
 async def setup(bot):
     await bot.add_cog(EventHandlers(bot))
