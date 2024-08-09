@@ -130,6 +130,7 @@ class EventHandlers(commands.Cog):
         channels = await self.bot.config.get_all_channels()
         for channel in channels:
             self.bot.logger.info(f"Loaded Channel: {channel['channel_name']}")
+        self.bot.logger.info("Bot is ready!")
     
     async def handle_config_pre(self, channel_config: dict, message: discord.Message):
         if channel_config["react"]:
