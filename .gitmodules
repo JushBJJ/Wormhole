@@ -1,3 +1,3 @@
-[submodule "ssh-chat"]
-	path = ssh-chat
-	url = https://github.com/shazow/ssh-chat.git
+[submodule "wormhole-ssh-chat"]
+	path = Wormhole-ssh-chat
+	url = https://github.com/JushBJJ/Wormhole-ssh-chat
