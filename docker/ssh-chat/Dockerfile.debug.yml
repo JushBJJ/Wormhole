@@ -5,7 +5,7 @@ ARG VERSION=v1.10
 WORKDIR /usr/src/app
 
 RUN apk add --no-cache git make openssh && \
-    git clone https://github.com/shazow/ssh-chat.git . && \
+    git clone https://github.com/JushBJJ/Wormhole-ssh-chat/.git . && \
     git checkout ${VERSION} && \
     make build
 
