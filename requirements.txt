@@ -12,3 +12,4 @@ debugpy
 google-generativeai
 asyncpg
 ollama
+watchdog

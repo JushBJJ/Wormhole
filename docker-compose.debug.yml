@@ -66,6 +66,22 @@ services:
               count: all
               capabilities: [gpu]
 
+  ssh-chat:
+    container_name: ssh-chat
+    env_file:
+      - .env_dev
+    build:
+      dockerfile: ./docker/ssh-chat/Dockerfile.debug.yml
+      context: .
+    ports:
+      - "2022:2022"
+    restart: unless-stopped
+    volumes:
+      - ssd-data:/mnt/ExtremeSSD/Wormhole/dev
+    networks:
+      - wormhole-network-dev
+    command: ["/usr/local/bin/ssh-chat", "-i", "/root/.ssh/id_ed25519_ssh_chat", "--log", "/mnt/ExtremeSSD/Wormhole/dev/logs/chat.txt"]
+
 networks:
   wormhole-network-dev:
     driver: bridge

@@ -1,15 +1,90 @@
-from discord.ext import commands, tasks
+from discord.ext import commands
 from bot.config import WormholeConfig
 from bot.utils.logging import setup_logging
 from bot.features.pretty_message import PrettyMessage
 from bot.features.proof_of_work import PoWHandler
 from bot.features.LLM.gemini import get_closest_command
 from bot.features.embed import create_embed
+from typing import List, Dict
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from datetime import datetime
 
+import re
 import discord
 import os
 import asyncio
 import traceback
+
+class LogParser:
+    def __init__(self):
+        self.timestamp_pattern = r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+        self.system_message_pattern = rf'{self.timestamp_pattern}\s+\*\s+(.*)'
+        self.user_message_pattern = rf'{self.timestamp_pattern}\s+([^:]+):\s+(.*)'
+
+    def parse_log(self, log_lines: List[str]) -> List[Dict[str, str]]:
+        parsed_messages = []
+        for line in log_lines:
+            parsed_message = self.parse_line(line)
+            if parsed_message:
+                parsed_messages.append(parsed_message)
+        return parsed_messages
+
+    def parse_line(self, line: str) -> Dict[str, str]:
+        system_match = re.match(self.system_message_pattern, line)
+        if system_match:
+            return self.create_system_message(*system_match.groups())
+
+        user_match = re.match(self.user_message_pattern, line)
+        if user_match:
+            return self.create_user_message(*user_match.groups())
+
+        return None
+
+    def create_system_message(self, timestamp: str, content: str) -> Dict[str, str]:
+        return {
+            'type': 'system',
+            'timestamp': self.parse_timestamp(timestamp),
+            'content': self.sanitize_content(content)
+        }
+
+    def create_user_message(self, timestamp: str, username: str, content: str) -> Dict[str, str]:
+        return {
+            'type': 'user',
+            'timestamp': self.parse_timestamp(timestamp),
+            'username': self.sanitize_username(username),
+            'content': self.sanitize_content(content)
+        }
+
+    def parse_timestamp(self, timestamp: str) -> str:
+        try:
+            return str(datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S'))
+        except ValueError:
+            return ''
+
+    def sanitize_username(self, username: str) -> str:
+        return ''.join(char for char in username if ord(char) >= 32 and ord(char) <= 126)[:50]
+
+    def sanitize_content(self, content: str) -> str:
+        return ''.join(char for char in content if ord(char) >= 32)
+
+class LogHandler(FileSystemEventHandler):
+    def __init__(self, filename, bot):
+        self.filename = filename
+        self.file = open(filename, 'r')
+        self.file.seek(0, 2)  # Go to the end of the file
+        self.bot = bot
+        self.log_parser = LogParser()
+
+    def on_modified(self, event):
+        if event.src_path == self.filename:
+            new_lines = self.file.readlines()
+            parsed_messages = self.log_parser.parse_log(new_lines)
+            for message in parsed_messages:
+                asyncio.run_coroutine_threadsafe(self.bot.send_log_to_discord(message), self.bot.loop)
+
+    def __del__(self):
+        self.file.close()
 
 class DiscordBot(commands.Bot):
     def __init__(self, config: WormholeConfig):
@@ -22,8 +97,12 @@ class DiscordBot(commands.Bot):
         self.pretty_message = PrettyMessage(config)
         self.pow_handler = PoWHandler(config, self)
         self.message_hashes = {}
-        self.last_messages = {} # Last overall 50 messages, seperated by channel and user
+        self.last_messages = {}  # Last overall 50 messages, separated by channel and user
         self.evaluations = {}
+
+        # Set up log monitoring
+        self.log_file = os.getenv("SSH_CHAT_FILE", "log.txt")  # Update this to your log file path
+        self.log_observer = None
 
     async def _setup_last_messages_dict(self) -> None:
         channel_categories: list[str] = await self.config.get_channel_list()
@@ -38,6 +117,15 @@ class DiscordBot(commands.Bot):
         self.logger.info("Before-invoke functions set.")
         await self._setup_last_messages_dict()
         self.logger.info("Last messages dict set up.")
+        self.logger.info("Monitoring ssh-chat...")
+        self.start_ssh_listen()
+
+    def start_ssh_listen(self):
+        event_handler = LogHandler(self.log_file, self)
+        self.log_observer = Observer()
+        self.log_observer.schedule(event_handler, path=self.log_file, recursive=False)
+        self.log_observer.start()
+        self.logger.info("ssh-chat monitoring started.")
 
     async def before_message(self, message: discord.Message) -> None:
         if message.author == self.user:
@@ -62,7 +150,7 @@ class DiscordBot(commands.Bot):
             raise commands.CheckFailure()
         success, result, _ = await self.pow_handler.check_pow(ctx.message, ctx.message.content, ctx.author.id, ctx.channel.id)
         if not success:
-            return # User failed PoW check
+            return  # User failed PoW check
         if isinstance(result, list):  
             tasks = []
             for notification in result:
@@ -80,6 +168,9 @@ class DiscordBot(commands.Bot):
 
     async def close(self) -> None:
         self.logger.info("Stopping bot...")
+        if self.log_observer:
+            self.log_observer.stop()
+            self.log_observer.join()
         await super().close()
         self.logger.info("Bot stopped.")
 
@@ -92,7 +183,7 @@ class DiscordBot(commands.Bot):
         ]
         for extension in extensions:
             try:
-                if not extension in self.extensions:
+                if extension not in self.extensions:
                     await self.load_extension(extension)
                     self.logger.info(f"Loaded extension: {extension}")
             except Exception as e:
@@ -147,7 +238,7 @@ class DiscordBot(commands.Bot):
                 return
 
             description = f"Error: `{str(error)}`\n\n"\
-                            f"Did you mean `{response.matched_command} {response.matched_subcommand}`?\n\n"\
+                          f"Did you mean `{response.matched_command} {response.matched_subcommand}`?\n\n"
             
             if response.match_probability > 7:
                 description += f"Auto-executing command: `Yes`\n"
@@ -200,6 +291,31 @@ class DiscordBot(commands.Bot):
                     ))
 
             self.logger.info(response)
+
+    async def send_log_to_discord(self, log_message: Dict[str, str]):
+        """ Prototype """
+        channels = await self.config.get_channels_by_category("test")
+        if channels:
+            tasks = []
+            for channel in channels:
+                _channel = self.get_channel(int(channel['channel_id']))
+                if log_message['type'] == 'system':
+                    embed = discord.Embed(
+                        title="System Message",
+                        description=log_message['content']
+                    )
+                    embed.set_footer(text="SSH-Chat")
+                else:
+                    embed = discord.Embed(
+                        title=f"{log_message['username']}",
+                        description=log_message['content']
+                    )
+                    embed.set_footer(text="SSH-Chat")
+                tasks.append(_channel.send(embed=embed))
+            await asyncio.gather(*tasks)
+        else:
+            self.logger.error(f"Error sending log message: No wormhole channels found")
+
 
 async def setup(bot):
     await bot.add_cog(DiscordBot(bot.config))
