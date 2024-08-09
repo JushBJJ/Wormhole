@@ -68,6 +68,37 @@ services:
               count: all
               capabilities: [gpu]
 
+  ssh-chat:
+    container_name: ssh-chat-prod
+    env_file:
+      - .env
+    build:
+      dockerfile: ./docker/ssh-chat/Dockerfile.prod.yml
+      context: .
+    ports:
+      - "2023:2022"
+    restart: unless-stopped
+    volumes:
+      - ssd-data:/mnt/ExtremeSSD/Wormhole/
+    networks:
+      - wormhole-network-prod
+    depends_on:
+      - redis
+    command: ["/usr/local/bin/ssh-chat", "-i", "/root/.ssh/id_ed25519_ssh_chat"]
+
+  redis:
+    image: redis:latest
+    env_file:
+      - .env
+    container_name: wormhole-redis-prod
+    ports:
+      - "6381:6381"
+    command: ["redis-server", "--port", "6381"] 
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/redis:/data
+    networks:
+      - wormhole-network-prod
+    restart: always
 networks:
   wormhole-network:
     driver: bridge

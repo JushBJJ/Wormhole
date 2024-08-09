@@ -19,6 +19,7 @@ services:
     depends_on:
       - postgres
       - ollama
+      - redis
     restart: always
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
 
@@ -67,7 +68,7 @@ services:
               capabilities: [gpu]
 
   ssh-chat:
-    container_name: ssh-chat
+    container_name: ssh-chat-dev
     env_file:
       - .env_dev
     build:
@@ -80,7 +81,23 @@ services:
       - ssd-data:/mnt/ExtremeSSD/Wormhole/dev
     networks:
       - wormhole-network-dev
-    command: ["/usr/local/bin/ssh-chat", "-i", "/root/.ssh/id_ed25519_ssh_chat", "--log", "/mnt/ExtremeSSD/Wormhole/dev/logs/chat.txt"]
+    depends_on:
+      - redis
+    command: ["/usr/local/bin/ssh-chat", "-i", "/root/.ssh/id_ed25519_ssh_chat"]
+
+  redis:
+    image: redis:latest
+    env_file:
+      - .env_dev
+    container_name: wormhole-redis-dev
+    ports:
+      - "6380:6380"
+    command: ["redis-server", "--port", "6380"] 
+    volumes:
+      - /mnt/ExtremeSSD/Wormhole/dev/redis:/data
+    networks:
+      - wormhole-network-dev
+    restart: always
 
 networks:
   wormhole-network-dev:

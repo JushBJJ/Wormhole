@@ -105,18 +105,16 @@ class EventHandlers(commands.Cog):
                         tasks.append(channel.send(content=embeds))
 
             real_messages = []
-            # Split the success and error message
             messages = await asyncio.gather(*tasks, return_exceptions=True)
+            content = content + attachments + sticker_content + mentions
+            await self.bot.redis_publish(display_name, user_hash, content, embeds, stickers_to_send)
             for result in messages:
                 if isinstance(result, discord.Message):
                     real_messages.append(result)
                 elif isinstance(result, Exception):
                     # URL('https://discord.com/api/v10/channels/<channel_id>/messages')
                     if result.status == 403: # Forbidden
-                        self.bot.logger.error(f"Error sending message to channel: {result.response.url.parts[4]}. Removing...")
                         await self.bot.config.remove_channel(result.response.url.parts[4])
-                    else:
-                        self.bot.logger.error(f"Error sending message: {result}")
             message_links = [message.jump_url for message in real_messages]
             await self.bot.config.append_link(message_hash, message_links)
             await self.handle_config_post(channel_config, message)
