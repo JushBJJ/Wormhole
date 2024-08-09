@@ -69,9 +69,11 @@ class DiscordBot(commands.Bot):
             self.logger.error(f"Failed to connect to Redis: {str(e)}")
             self.redis = None
 
-    async def redis_publish(self, name: str, user_hash: str, content: str, embeds, stickers_to_send) -> None:
+    async def redis_publish(self, name: str, user_hash: str, content: str, embeds, stickers_to_send, channel_category) -> None:
         if not self.redis:
             self.logger.error("Cannot publish to Redis: No connection")
+            return
+        elif channel_category != "wormhole":
             return
 
         message = content

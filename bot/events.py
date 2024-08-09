@@ -55,6 +55,7 @@ class EventHandlers(commands.Cog):
             content = message.content
             user_hash = await self.bot.config.get_user_hash(user_id)
             message_reference = message.reference
+            channel_category = channel_config["channel_category"]
 
             embed = await self.bot.pretty_message.to_embed(user_id, display_name, avatar, content)
             attachments = self.bot.pretty_message.to_attachments_message(message.attachments)
@@ -107,7 +108,7 @@ class EventHandlers(commands.Cog):
             real_messages = []
             messages = await asyncio.gather(*tasks, return_exceptions=True)
             content = content + attachments + sticker_content + mentions
-            await self.bot.redis_publish(display_name, user_hash, content, embeds, stickers_to_send)
+            await self.bot.redis_publish(display_name, user_hash, content, embeds, stickers_to_send, channel_category)
             for result in messages:
                 if isinstance(result, discord.Message):
                     real_messages.append(result)
@@ -120,7 +121,6 @@ class EventHandlers(commands.Cog):
             await self.handle_config_post(channel_config, message)
             
             # Handle temporary message and LLM moderation
-            channel_category = channel_config["channel_category"]
             self.bot.last_messages[channel_category].add((message.content, user_hash, time.time()))
             #await moderate_channel(self.bot, message, self.bot.last_messages,)
 
