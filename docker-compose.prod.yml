@@ -20,7 +20,7 @@ services:
       - postgres-prod
       - ollama
     restart: always
-    command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5679", "--wait-for-client", "run_discord.py"]
+    command: ["python", "run_discord.py"]
 
   postgres-prod:
     image: postgres:latest
@@ -34,7 +34,7 @@ services:
     networks:
       - wormhole-network
     ports:
-      - "5433:5432"
+      - "5434:5432"
 
   pgadmin-prod:
     image: dpage/pgadmin4:latest
