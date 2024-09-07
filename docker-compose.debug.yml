@@ -34,7 +34,7 @@ services:
     networks:
       - wormhole-network-dev
     ports:
-      - "5434:5432"
+      - "5435:5432"
 
   pgadmin:
     image: dpage/pgadmin4:latest
