@@ -1,7 +1,7 @@
 # Wormhole
 Inter-server communication bot.
 
-Main development branch is happening here: https://github.com/JushBJJ/Wormhole/tree/Refactor
+Not ready yet
 
 ssh-chat fork: https://github.com/JushBJJ/Wormhole-ssh-chat
 
