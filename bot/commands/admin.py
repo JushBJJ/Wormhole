@@ -63,7 +63,7 @@ class AdminCommands(commands.Cog):
     @admin.command(name="ban")
     async def ban_user(self, ctx, user_id_or_hash: str = None):
         """Ban a user from using the Wormhole bot"""
-        if await self.config.is_user_banned(user_id_or_hash):
+        if not await self.config.is_user_banned(user_id_or_hash):
             await self.config.ban_user(user_id_or_hash)
             await ctx.send(f"Banned user `{user_id_or_hash}`")
         else:
