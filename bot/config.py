@@ -6,7 +6,6 @@ import math
 import time
 from typing import Dict, List, Optional
 from functools import wraps
-from convert_config_to_sql import convert
 
 import asyncpg
 import dotenv
@@ -43,10 +42,7 @@ class WormholeConfig:
 
     async def initialize(self):
         self.pool = await asyncpg.create_pool(self.db_url)
-        print("Converting JSON config to SQL...")
-        with open(os.getenv("CONFIG_PATH")) as f:
-            json_txt = json.load(f)
-        await convert(json_txt=json_txt, config=self)
+
     # User Management
     # ---------------
 
@@ -79,102 +75,6 @@ class WormholeConfig:
                 user_id
             )
             return usernames
-
-    # --- Old Functions ---
-    async def _old_add_user(self, user_config: dict):
-        user_hash = user_config["hash"]
-        user_id = user_config["user_id"]
-        role = user_config["role"]
-        nonce = user_config["nonce"]
-        profile_picture = user_config["profile_picture"]
-
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO Users (hash, user_id, role, profile_picture, nonce)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT DO NOTHING
-                """,
-                user_hash, user_id, role, profile_picture, int(nonce)
-            )
-    
-    async def _old_add_channel(self, channel_id: str, server_id: int, channel_category: str, react: bool):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO Channels (channel_id, server_id, channel_category, react)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT DO NOTHING
-                """,
-                channel_id, server_id, channel_category, bool(react)
-            )
-    
-    async def _old_add_role(self, role_name: str, role_color: str):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO Roles (name, color)
-                VALUES ($1, $2)
-                ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color
-                """,
-                role_name, role_color
-            )
-
-    async def _old_add_admin(self, user_id: str):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO Admins (user_id)
-                VALUES ($1)
-                ON CONFLICT (user_id) DO NOTHING
-                """,
-                user_id
-            )
-
-    async def _old_add_server(self, server_id: int, server_name: str):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO Servers (server_id, server_name)
-                VALUES ($1, $2)
-                ON CONFLICT (server_id) DO UPDATE SET server_name = EXCLUDED.server_name
-                """,
-                server_id, server_name
-            )
-
-    async def _old_add_channel_list(self, channel_name: str):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO ChannelList (channel_name)
-                VALUES ($1)
-                ON CONFLICT (channel_name) DO NOTHING
-                """,
-                channel_name
-            )
-
-    async def _old_add_banned_server(self, server_id: int):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO BannedServers (server_id)
-                VALUES ($1)
-                ON CONFLICT (server_id) DO NOTHING
-                """,
-                server_id
-            )
-
-    async def _old_add_banned_user(self, user_id: str):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO BannedUsers (user_id)
-                VALUES ($1)
-                ON CONFLICT (user_id) DO NOTHING
-                """,
-                user_id
-            )
-    # --- End Old Functions ---
 
     async def update_user_config(self, user_id: str, **kwargs):
         async with self.pool.acquire() as conn:
