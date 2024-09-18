@@ -9,7 +9,7 @@ services:
     image: wormhole-bot:debug
     volumes:
       - .:/app
-      - ssd-data:/mnt/ExtremeSSD/Wormhole/dev
+      - $HOME/Wormhole/dev:/opt/wormhole/dev
     env_file:
       - .env_dev
     networks:
@@ -18,7 +18,6 @@ services:
       - "5679:5678"
     depends_on:
       - postgres
-      - ollama
       - redis
     restart: always
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "run_discord.py"]
@@ -29,43 +28,12 @@ services:
     env_file:
       - .env_dev
     volumes:
-      - /mnt/ExtremeSSD/Wormhole/dev/database/postgres:/var/lib/postgresql/data
+      - $HOME/Wormhole/dev/database/postgres:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - wormhole-network-dev
     ports:
       - "5435:5432"
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: wormhole-pgadmin-dev
-    env_file:
-      - .env_dev
-    volumes:
-      - /mnt/ExtremeSSD/Wormhole/dev/database/pgadmin:/var/lib/pgadmin
-    networks:
-      - wormhole-network-dev
-    ports:
-      - "5052:80"
-    depends_on:
-      - postgres
-
-  ollama:
-    image: ollama/ollama
-    container_name: ollama-dev
-    volumes:
-      - /mnt/ExtremeSSD/ollama:/root/.ollama
-    ports:
-      - "11435:11434"
-    networks:
-      - wormhole-network-dev
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   ssh-chat:
     container_name: ssh-chat-dev
@@ -78,7 +46,7 @@ services:
       - "2022:2022"
     restart: unless-stopped
     volumes:
-      - ssd-data:/mnt/ExtremeSSD/Wormhole/dev
+      - $HOME/Wormhole/dev:/opt/wormhole/dev
     networks:
       - wormhole-network-dev
     depends_on:
@@ -94,7 +62,7 @@ services:
       - "6380:6380"
     command: ["redis-server", "--port", "6380"] 
     volumes:
-      - /mnt/ExtremeSSD/Wormhole/dev/redis:/data
+      - $HOME/Wormhole/dev/redis:/data
     networks:
       - wormhole-network-dev
     restart: always
@@ -104,10 +72,9 @@ networks:
     driver: bridge
 
 volumes:
-  ssd-data:
+  wormhole-data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /mnt/ExtremeSSD/Wormhole/dev
-  ollama:
+      device: $HOME/Wormhole/

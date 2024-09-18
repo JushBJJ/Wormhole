@@ -9,66 +9,33 @@ services:
     image: wormhole-bot:prod
     volumes:
       - .:/app
-      - ssd-data:/mnt/ExtremeSSD/Wormhole/
+      - $HOME/Wormhole:/opt/wormhole/prod
     env_file:
       - .env
     networks:
-      - wormhole-network
+      - wormhole-network-prod
     ports:
       - "5678:5679"
     depends_on:
       - postgres-prod
-      - ollama
+      - redis-prod
     restart: always
     command: ["python", "run_discord.py"]
 
   postgres-prod:
     image: postgres:latest
     container_name: wormhole-postgres-prod
-    user: root
     env_file:
       - .env
     volumes:
-      - /mnt/ExtremeSSD/Wormhole/database/postgres:/var/lib/postgresql/data
+      - $HOME/Wormhole/database/postgres:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - wormhole-network
+      - wormhole-network-prod
     ports:
       - "5434:5432"
 
-  pgadmin-prod:
-    image: dpage/pgadmin4:latest
-    container_name: wormhole-pgadmin-prod
-    user: root
-    env_file:
-      - .env
-    volumes:
-      - /mnt/ExtremeSSD/Wormhole/database/pgadmin:/var/lib/pgadmin
-    networks:
-      - wormhole-network
-    ports:
-      - "5051:80"
-    depends_on:
-      - postgres-prod
-
-  ollama:
-    image: ollama/ollama
-    container_name: ollama-prod
-    volumes:
-      - /mnt/ExtremeSSD/ollama:/root/.ollama
-    ports:
-      - "11434:11434"
-    networks:
-      - wormhole-network
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-  ssh-chat:
+  ssh-chat-prod:
     container_name: ssh-chat-prod
     env_file:
       - .env
@@ -79,14 +46,14 @@ services:
       - "2023:2022"
     restart: unless-stopped
     volumes:
-      - ssd-data:/mnt/ExtremeSSD/Wormhole/
+      - $HOME/Wormhole:/opt/wormhole/prod
     networks:
-      - wormhole-network
+      - wormhole-network-prod
     depends_on:
-      - redis
+      - redis-prod
     command: ["/usr/local/bin/ssh-chat", "-i", "/root/.ssh/id_ed25519_ssh_chat"]
 
-  redis:
+  redis-prod:
     image: redis:latest
     env_file:
       - .env
@@ -95,19 +62,19 @@ services:
       - "6381:6381"
     command: ["redis-server", "--port", "6381"] 
     volumes:
-      - /mnt/ExtremeSSD/Wormhole/redis:/data
+      - $HOME/Wormhole/redis:/data
     networks:
-      - wormhole-network
+      - wormhole-network-prod
     restart: always
+
 networks:
-  wormhole-network:
+  wormhole-network-prod:
     driver: bridge
 
 volumes:
-  ssd-data:
+  wormhole-data-prod:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /mnt/ExtremeSSD/Wormhole/
-  ollama:
+      device: $HOME/Wormhole/
