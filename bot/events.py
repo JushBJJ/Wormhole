@@ -111,6 +111,24 @@ class EventHandlers(commands.Cog):
             await self.bot.config.append_link(message_hash, message_links)
             await self.handle_config_post(channel_config, message)
 
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                await channel.send("""Hello! I'm Wormhole, a bot that allows you to connect channels across servers.
+                                   
+                                    Make sure you have set the correct permissions for me to work properly in specific channels.
+                                    To see a list of channels availble to join, use the `%list` command.
+                                    To join a channel, use the `%join <channelName>` command.
+                                    To leave a channel, use the `%leave` command.
+                                   
+                                    As a start, try `%join wormhole` to join the default wormhole channel.
+                                   
+                                    There are some commands that only wormhole admins (not server admins) can use like adding new channels and moderation.
+                                    Have fun!
+                                   """)
+                break
+
     async def send_startup_message(self):
         channels = await self.bot.config.get_all_channels()
         for channel in channels:
