@@ -35,7 +35,7 @@ class WormholeCommands(commands.Cog):
         else:
             await ctx.send(
                 f"This channel is already connected to {current_channel}"
-                f"\nPlease use `%wormhole leave` to leave the current channel"
+                f"\nPlease use `%leave` to leave the current channel"
             )
 
     @commands.command(name="leave")
