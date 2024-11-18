@@ -21,6 +21,8 @@ class EventHandlers(commands.Cog):
     async def on_message(self, message):
         if message.author == self.bot.user:
             return
+        if message.webhook_id is not None:
+            return
 
         user_id = str(message.author.id)
         channel_id = str(message.channel.id)
@@ -73,28 +75,39 @@ class EventHandlers(commands.Cog):
                                 reply_messages.append(reply_message)
                         except:
                             pass
+            
+            # Check if own channel can manage webhooks
+            permissions = message.channel.permissions_for(message.guild.me)
+            if not permissions.manage_webhooks:
+                await message.channel.send(
+                    f":warning: I need the 'Manage Webhooks' permission in this server to send/receive wormhole messages."
+                )
+                return
 
             for channel_id in channels:
                 if int(channel_id) == message.channel.id:
                     continue
                 channel = self.bot.get_channel(int(channel_id))
                 if channel:
-                    reply_to = next((msg for msg in reply_messages if msg.channel == channel), None)
-                    send_kwargs = {
-                        'embed': embed, 
-                        "reference": reply_to, 
-                    }
-                    tasks.append(channel.send(**send_kwargs))
-                    # Send another but for stickers and content
-                    send_kwargs_2 = {
-                        "stickers": stickers_to_send,
-                        "content": attachments + sticker_content + mentions if attachments or sticker_content or mentions else None
-                    }
-                    tasks.append(channel.send(**send_kwargs_2))
-                    if message.embeds and not (attachments or embeds):
-                        tasks.append(channel.send(embed=message.embeds[0]))
-                    if embeds:
-                        tasks.append(channel.send(content=embeds))
+                    permissions = channel.permissions_for(channel.guild.me)
+                    if permissions.manage_webhooks:
+                        webhooks = await channel.webhooks()
+                        webhook = discord.utils.get(webhooks, name="WormholeWebhook")
+                        if not webhook:
+                            webhook = await channel.create_webhook(name="WormholeWebhook")
+                        content_to_send = content + attachments + sticker_content if attachments or sticker_content or mentions else content
+                        tasks.append(webhook.send(
+                            content=content_to_send,
+                            username=display_name + f" ({user_hash[:6]})",
+                            avatar_url=avatar,
+                            embeds=message.embeds if message.embeds and message.author.bot else [],
+                            allowed_mentions=discord.AllowedMentions(everyone=False)
+                        ))
+                    else:
+                        # Send message if bot can't create webhooks
+                        tasks.append(channel.send(
+                            f":warning: I need the 'Manage Webhooks' permission in this server to send/receive wormhole messages."
+                        ))
 
             real_messages = []
             messages = await asyncio.gather(*tasks, return_exceptions=True)
@@ -123,6 +136,7 @@ class EventHandlers(commands.Cog):
                                     To leave a channel, use the `%leave` command.
                                    
                                     As a start, try `%join wormhole` to join the default wormhole channel.
+                                    :warning: MAKE SURE TO SET PERMISSIONS TO MANAGE WEBHOOKS IN THE SERVER TO SEND/RECIEVE FOR WORMHOLE TO WORK.
                                    
                                     There are some commands that only wormhole admins (not server admins) can use like adding new channels and moderation.
                                     Have fun!

@@ -98,9 +98,14 @@ class WormholeConfig:
 
     async def get_user_by_hash(self, user_hash: str) -> Dict:
         async with self.pool.acquire() as conn:
+            if classify_user_id(user_hash) == "Digit":
+                user_hash = hashlib.sha256(f"{self.global_salt}{user_hash}".encode()).hexdigest()
             user = await conn.fetchrow(
                 """
-                SELECT * FROM Users WHERE hash = $1
+                SELECT * FROM Users 
+                WHERE hash LIKE $1 || '%'
+                ORDER BY LENGTH(hash)
+                LIMIT 1
                 """,
                 user_hash
             )
@@ -110,7 +115,10 @@ class WormholeConfig:
         async with self.pool.acquire() as conn:
             user_id = await conn.fetchval(
                 """
-                SELECT user_id FROM Users WHERE hash = $1
+                SELECT user_id FROM Users 
+                WHERE hash LIKE $1 || '%'
+                ORDER BY LENGTH(hash)
+                LIMIT 1
                 """,
                 user_hash
             )
@@ -137,7 +145,12 @@ class WormholeConfig:
 
             await conn.execute(
                 """
-                UPDATE Users SET role = $1 WHERE hash = $2
+                UPDATE Users SET role = $1 WHERE user_id = (
+                    SELECT user_id FROM Users 
+                    WHERE hash LIKE $2 || '%'
+                    ORDER BY LENGTH(hash)
+                    LIMIT 1
+                )
                 """,
                 role, user_hash
             )
@@ -162,13 +175,13 @@ class WormholeConfig:
             )
             
             is_banned_2 = False
-            if classify_user_id(user_id) == "Digit":
-                user_hash = hashlib.sha256(f"{self.global_salt}{user_id}".encode()).hexdigest()
+            if not is_banned:
+                user_id = await self.get_user_id_by_hash(user_id)
                 is_banned_2 = await conn.fetchval(
                     """
                     SELECT EXISTS(SELECT 1 FROM BannedUsers WHERE user_id = $1)
                     """,
-                    user_hash
+                    user_id
                 )
             return is_banned or is_banned_2
 
@@ -204,7 +217,9 @@ class WormholeConfig:
         async with self.pool.acquire() as conn:
             user = await conn.fetchval(
                 """
-                SELECT EXISTS(SELECT 1 FROM Users WHERE user_id = $1)
+                SELECT EXISTS(SELECT 1 FROM Users WHERE hash LIKE $1 || '%')
+                ORDER BY LENGTH(hash)
+                LIMIT 1
                 """,
                 user_id
             )
@@ -506,6 +521,8 @@ class WormholeConfig:
 
     async def get_user_role(self, user_id: str) -> str:
         async with self.pool.acquire() as conn:
+            if classify_user_id(user_id) != "Digit":
+                user_id = await self.get_user_id_by_hash(user_id)
             role = await conn.fetchval(
                 """
                 SELECT role FROM Users WHERE user_id = $1
