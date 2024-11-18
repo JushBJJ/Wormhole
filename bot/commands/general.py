@@ -84,25 +84,9 @@ class GeneralCommands(commands.Cog):
             user_id_or_hash = author_id
 
         try:
-            try:
-                _ = int(user_id_or_hash)
-                user_config = await self.config.get_user(user_id_or_hash)
-                send_method = ctx.author.send
-                
-                if await self.config.get_user_role(author_id) != "admin" and author_id != user_id_or_hash:
-                    await ctx.send("You must be a Wormhole admin to view user information by ID.")
-                    return
-            except ValueError:
-                user_config = await self.config.get_user_by_hash(user_id_or_hash)
-                send_method = ctx.send
-
+            user_config = await self.config.get_user_by_hash(user_id_or_hash)
             embed = await self.create_user_embed(user_config)
-            await send_method(embed=embed)
-            if send_method == ctx.author.send:
-                await ctx.send("For privacy reasons, I have sent you a DM.")
-
-        except discord.Forbidden:
-            await ctx.send("I couldn't send you a DM. Please check your privacy settings.")
+            await ctx.send(embed=embed)
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
