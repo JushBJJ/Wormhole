@@ -132,6 +132,9 @@ class WormholeConfig:
 
     async def change_user_role(self, user_hash: str, role: str) -> None:
         async with self.pool.acquire() as conn:
+            if classify_user_id(user_hash) == "Digit":
+                user_hash = hashlib.sha256(f"{self.global_salt}{user_hash}".encode()).hexdigest()
+
             await conn.execute(
                 """
                 UPDATE Users SET role = $1 WHERE hash = $2
