@@ -193,16 +193,39 @@ class DiscordBot(commands.Bot):
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CheckFailure):
             return
+        elif isinstance(error, commands.CommandNotFound):
+            await ctx.send(
+                embed=create_embed(
+                    title="Command Error",
+                    description=f"Unknown command `{ctx.invoked_with}`"
+                )
+            )
+        elif isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument, commands.UserInputError)):
+            command = self.get_command(ctx.invoked_with)
+            if command:
+                usage = f"{ctx.prefix}{command.qualified_name} {command.signature}"
+                await ctx.send(
+                    embed=create_embed(
+                        title="Usage Error",
+                        description=f"Usage: `{usage}`\n\n{command.help or ''}"
+                    )
+                )
+            else:
+                await ctx.send(
+                    embed=create_embed(
+                        title="Command Error",
+                        description=f"Unknown command `{ctx.invoked_with}`"
+                    )
+                )
         else:
             self.logger.error(f"Command error: {str(error)}")
             self.logger.error(traceback.format_exc())
             await ctx.send(
                 embed=create_embed(
                     title="Command Error",
-                    description=f"Unknown command `{ctx.message.content}`"
+                    description="An unexpected error occurred. Please try again later."
                 )
             )
-            return
 
 async def setup(bot):
     await bot.add_cog(DiscordBot(bot.config))
