@@ -9,42 +9,36 @@ class WormholeCommands(commands.Cog):
         self.bot: DiscordBot = bot
         self.config: WormholeConfig = bot.config
 
-    @commands.group(case_insensitive=True, invoke_without_command=True)
-    @is_wormhole_admin()
-    async def wormhole(self, ctx):
-        """Wormhole channel management commands"""
-        await ctx.send("Invalid wormhole command. Use `help wormhole` for more information.")
-
-    @wormhole.command(name="list")
+    @commands.command(name="list")
     async def list_channels(self, ctx):
         """List all available Wormhole channels"""
         channels = await self.config.get_all_channels()
         channel_names = "\n- ".join([channel['channel_name'] for channel in channels])
         await ctx.send(f"Available Wormhole channels:\n- {channel_names}")
 
-    @wormhole.command(name="join")
-    async def join(self, ctx, channel_name: str):
+    @commands.command(name="join")
+    async def join(self, ctx, channelName: str):
         """Join a Wormhole channel"""
         channel_id = str(ctx.channel.id)
         current_channel = await self.config.get_channel_name_by_id(channel_id)
         if not current_channel:
-            channel_exists = await self.config.category_exists(channel_name)
+            channel_exists = await self.config.category_exists(channelName)
             if channel_exists:
                 channel_joined = await self.config.get_channel_category_by_id(channel_id)
                 if not channel_joined:
-                    await self.config.join_channel(channel_name, channel_id, str(ctx.guild.id))
-                    await ctx.send(f"Joined Wormhole channel: {channel_name}")
+                    await self.config.join_channel(channelName, channel_id, str(ctx.guild.id))
+                    await ctx.send(f"Joined Wormhole channel: {channelName}")
                 else:
-                    await ctx.send(f"This channel is already connected to {channel_name}")
+                    await ctx.send(f"This channel is already connected to {channelName}")
             else:
-                await ctx.send(f"Channel {channel_name} does not exist")
+                await ctx.send(f"Channel {channelName} does not exist")
         else:
             await ctx.send(
                 f"This channel is already connected to {current_channel}"
                 f"\nPlease use `%wormhole leave` to leave the current channel"
             )
 
-    @wormhole.command(name="leave")
+    @commands.command(name="leave")
     async def leave(self, ctx):
         """Leave the current Wormhole channel"""
         channel_id = str(ctx.channel.id)

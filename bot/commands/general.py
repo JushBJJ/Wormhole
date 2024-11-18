@@ -76,12 +76,7 @@ class GeneralCommands(commands.Cog):
         embed.set_thumbnail(url=self.bot.user.avatar.url)
         await ctx.send(embed=embed)
 
-    @commands.group(case_insensitive=True, invoke_without_command=True)
-    async def user(self, ctx):
-        """User-related commands"""
-        await ctx.invoke(self.bot.get_command('help'), command='user')
-
-    @user.command(name="info")
+    @commands.command(name="userinfo")
     async def get_user(self, ctx, user_id_or_hash: str = None):
         """Get user information by ID or hash"""
         author_id = str(ctx.author.id)
