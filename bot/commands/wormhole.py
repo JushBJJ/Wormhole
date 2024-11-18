@@ -55,27 +55,5 @@ class WormholeCommands(commands.Cog):
         else:
             await ctx.send("This channel is not connected to any Wormhole channel")
 
-    @commands.group(case_insensitive=True, invoke_without_command=True)
-    async def pow(self, ctx):
-        """PoW-related commands"""
-        await ctx.send("Invalid pow command. Use `help pow` for more information.")
-
-    @pow.command(name="reset_difficulty")
-    @is_wormhole_admin()
-    async def reset_user_difficulty(self, ctx, user_id_or_hash: Optional[str] = None):
-        """Reset the user's difficulty"""
-        if user_id_or_hash is None:
-            user_id_or_hash = str(ctx.author.id)
-        await self.config.reset_user_difficulty(user_id_or_hash)
-        await ctx.send("User difficulty reset")
-
-    @pow.command(name="pow_status")
-    async def pow_status(self, ctx, user_id_or_hash: Optional[str] = None):
-        """Get the current PoW status for the user"""
-        if user_id_or_hash is None:
-            user_id_or_hash = str(ctx.author.id)
-        status = await self.bot.pow_handler.get_pow_status(user_id_or_hash)
-        await ctx.send(status)
-
 async def setup(bot):
     await bot.add_cog(WormholeCommands(bot))

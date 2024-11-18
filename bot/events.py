@@ -5,7 +5,6 @@ import discord
 import json
 
 from discord.ext import commands
-from bot.features.LLM.ollama import moderate_channel
 from services.discord import DiscordBot
 
 class EventHandlers(commands.Cog):
@@ -22,18 +21,10 @@ class EventHandlers(commands.Cog):
     async def on_message(self, message):
         if message.author == self.bot.user:
             return
-        
-        async def wait_for_hash():
-            for _ in range(60):
-                message_hash = self.bot.message_hashes.get(message.id, None)
-                if message_hash is not None:
-                    return message_hash
-                await asyncio.sleep(0.5)
-            return ""
 
-        message_hash = await wait_for_hash()
         user_id = str(message.author.id)
         channel_id = str(message.channel.id)
+        message_hash = hashlib.sha256((message.content + user_id + channel_id).encode()).hexdigest()
 
         if await self.bot.config.is_user_banned(user_id):
             return
@@ -119,10 +110,6 @@ class EventHandlers(commands.Cog):
             message_links = [message.jump_url for message in real_messages]
             await self.bot.config.append_link(message_hash, message_links)
             await self.handle_config_post(channel_config, message)
-            
-            # Handle temporary message and LLM moderation
-            self.bot.last_messages[channel_category].add((message.content, user_hash, time.time()))
-            #await moderate_channel(self.bot, message, self.bot.last_messages,)
 
     async def send_startup_message(self):
         channels = await self.bot.config.get_all_channels()

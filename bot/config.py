@@ -296,103 +296,6 @@ class WormholeConfig:
         parts = link.split('/')
         return parts[-2], parts[-1]
 
-    # User Difficulty Management
-    # --------------------------
-
-    async def calculate_user_difficulty(self, user_id: str, user_joined_at: datetime) -> float:
-        short_term_window = 5 * 60
-        medium_term_window = 24 * 60 * 60
-        long_term_window = 30 * 24 * 60 * 60
-        
-        short_term_threshold = 10
-        medium_term_threshold = 50
-        long_term_threshold = 500
-        
-        base_difficulty = 1.0
-        
-        # Calculate the time from the user's join date
-        time_since_joined = time.time() - user_joined_at.timestamp()
-        
-        async with self.pool.acquire() as conn:
-            current_time = time.time()
-            result = await conn.fetchrow(
-                """
-                SELECT 
-                    COUNT(*) FILTER (WHERE timestamp > $2) AS short_term_count,
-                    COUNT(*) FILTER (WHERE timestamp > $3) AS medium_term_count,
-                    COUNT(*) FILTER (WHERE timestamp > $4) AS long_term_count
-                FROM MessageHistory
-                WHERE user_id = $1
-                    AND timestamp > LEAST($2, $3, $4)
-                """,
-                user_id, current_time - short_term_window, 
-                current_time - medium_term_window, current_time - long_term_window
-            )
-
-            short_term_count = result['short_term_count']
-            medium_term_count = result['medium_term_count']
-            long_term_count = result['long_term_count']
-
-            short_term_factor = math.pow(short_term_count / short_term_threshold, 2)
-            medium_term_factor = math.sqrt(medium_term_count / medium_term_threshold)
-            long_term_factor = math.log(long_term_count / long_term_threshold + 1) / math.log(2)
-
-            difficulty = base_difficulty * (
-                0.6 * short_term_factor +
-                0.1 * medium_term_factor +
-                0.05 * long_term_factor
-            )
-
-            # Factor in the time since the user joined
-            max_time_reduction = 0.8  # Maximum 80% reduction in difficulty
-            time_factor = min(time_since_joined / (365 * 24 * 60 * 60), 1)  # Cap at 1 year
-            time_reduction = max_time_reduction * time_factor
-            difficulty *= (1 - time_reduction)
-
-            user = await self.get_user(user_id)
-            penalty = user['difficulty_penalty']
-            
-            final_difficulty = difficulty + penalty
-
-            await conn.execute(
-                """
-                UPDATE Users SET difficulty = $1 WHERE user_id = $2
-                """,
-                final_difficulty, user_id
-            )
-
-            return final_difficulty
-
-    async def reset_user_penalty(self, user_id: str) -> None:
-        async with self.pool.acquire() as conn:
-            if classify_user_id(user_id) == "SHA256 hash":
-                user = await self.get_user_by_hash(user_id)
-                user_id = user['user_id']
-            await conn.execute(
-                """
-                UPDATE Users SET difficulty_penalty = 0 WHERE user_id = $1
-                """,
-                user_id
-            )
-
-    async def reset_user_difficulty(self, user_id: str) -> None:
-        async with self.pool.acquire() as conn:
-            if classify_user_id(user_id) == "SHA256 hash":
-                user = await self.get_user_by_hash(user_id)
-                user_id = user['user_id']
-            await conn.execute(
-                """
-                UPDATE Users SET difficulty = 0, difficulty_penalty = 0 WHERE user_id = $1
-                """,
-                user_id
-            )
-            await conn.execute(
-                """
-                DELETE FROM MessageHistory WHERE user_id = $1
-                """,
-                user_id
-            )
-
     # Channel Management
     # ------------------
 
@@ -621,15 +524,6 @@ class WormholeConfig:
                     UPDATE Users SET nonce = $1 WHERE user_id = $2
                     """,
                     nonce, user_id
-            )
-    
-    async def update_user_difficulty_penalty(self, user_id: str, penalty: float):
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE Users SET difficulty_penalty = difficulty_penalty + $1 WHERE user_id = $2
-                """,
-                penalty, user_id
             )
 
     # Admin Management
