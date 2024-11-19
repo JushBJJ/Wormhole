@@ -5,10 +5,7 @@ aiohttp
 python-dotenv
 colorlog
 rich
-instructor
-outlines
 setuptools
 debugpy
-google-generativeai
 asyncpg
-ollama
+irc3
