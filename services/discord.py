@@ -4,9 +4,10 @@ import os
 import traceback
 import discord
 import redis.asyncio as redis
+import irc.client_aio
 
 from discord.ext import commands, tasks
-from typing import Optional
+from typing import Dict, List, Optional
 from bot.config import WormholeConfig
 from bot.utils.logging import setup_logging
 from bot.features.pretty_message import PrettyMessage
@@ -29,22 +30,38 @@ class DiscordBot(commands.Bot):
         self.redis_url = os.getenv("REDIS_HOST_URL", "redis://localhost:6379")
         self.redis_channel = os.getenv("REDIS_DISCORD_CHANNEL", "wormhole-discord")
         self.redis_ssh_channel = os.getenv("REDIS_SSH_CHANNEL", "wormhole-ssh-chat")
+        self.irc_server = os.getenv("IRC_SERVER")
+        self.irc_port = int(os.getenv("IRC_PORT"))
+        self.irc_nickname = os.getenv("IRC_NICKNAME")
+        self.irc_client = None
+        self.setup_once = False
 
     async def _setup_last_messages_dict(self) -> None:
         channel_categories: list[str] = await self.config.get_channel_list()
         self.last_messages = {category: set() for category in channel_categories}
         
     async def setup_hook(self) -> None:
-        self.logger.info("Setting up bot...")        
-        await self.load_extensions()
-        self.logger.info("Extensions loaded successfully.")
-        self.add_listener(self.before_message, "on_message")
-        self.before_invoke(self.before_command)
-        self.logger.info("Before-invoke functions set.")
-        await self._setup_last_messages_dict()
-        self.logger.info("Last messages dict set up.")
-        self.redis_reconnect_task.start()
-        self.logger.info("Redis reconnect task started.")
+        if not self.setup_once:
+            self.setup_once = True
+            self.logger.info("Setting up bot...")        
+            await self.load_extensions()
+            self.logger.info("Extensions loaded successfully.")
+            self.add_listener(self.before_message, "on_message")
+            self.before_invoke(self.before_command)
+            self.logger.info("Before-invoke functions set.")
+            await self._setup_last_messages_dict()
+            self.logger.info("Last messages dict set up.")
+            self.redis_reconnect_task.start()
+            self.logger.info("Redis reconnect task started.")
+
+            channel_list = await self.config.get_channel_list()
+            _channel_list = []
+            for channel_name in channel_list:
+                irc_channel = f'#{channel_name}'
+                _channel_list.append(irc_channel)
+            self.irc_client = IRCClient(self, irc_channel)
+            self.irc_client.target_channels = _channel_list
+            await self.irc_client.connect_and_start()
 
     @tasks.loop(seconds=30)
     async def redis_reconnect_task(self):
@@ -167,6 +184,9 @@ class DiscordBot(commands.Bot):
         if hasattr(self, 'log_observer'):
             self.log_observer.stop()
             self.log_observer.join()
+        if self.irc_client:
+            self.irc_client.connection.close()
+            self.irc_client = None
         await super().close()
         self.logger.info("Bot stopped.")
 
@@ -226,6 +246,80 @@ class DiscordBot(commands.Bot):
                     description="An unexpected error occurred. Please try again later."
                 )
             )
+
+    async def forward_irc_message_to_discord(self, irc_channel: str, sender: str, message: str):
+        channels = await self.config.get_channels_by_category(irc_channel)
+        if channels:
+            tasks = []
+            for channel_data in channels:
+                channel = self.get_channel(int(channel_data['channel_id']))
+                if channel:
+                    permissions = channel.permissions_for(channel.guild.me)
+                    if permissions.manage_webhooks:
+                        webhooks = await channel.webhooks()
+                        webhook = discord.utils.get(webhooks, name="WormholeWebhook")
+                        if not webhook:
+                            webhook = await channel.create_webhook(name="WormholeWebhook")
+                        tasks.append(webhook.send(
+                            content=message,
+                            username=sender,
+                            avatar_url="https://cdn.discordapp.com/attachments/1257498794069590017/1308490243607101531/28xp-pepefrog-superJumbo.png?ex=673e2200&is=673cd080&hm=744054e11717702ff67e89f482c37ff5363631ccaaa651c43b7998bf3ad75ad2&",
+                            allowed_mentions=discord.AllowedMentions(everyone=False)
+                        ))
+                    else:
+                        tasks.append(channel.send(
+                            f":warning: I need the 'Manage Webhooks' permission in this server to send/receive wormhole messages."
+                        ))
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+class IRCClient(irc.client_aio.AioSimpleIRCClient):
+    def __init__(self, bot, irc_channels):
+        super().__init__()
+        self.bot = bot
+        self.nickname = bot.irc_nickname
+        self.target_channels = irc_channels
+
+    async def connect_and_start(self):
+        try:
+            await self.connection.connect(
+                self.bot.irc_server,
+                self.bot.irc_port,
+                self.nickname
+            )
+        except irc.client.ServerConnectionError as e:
+            self.bot.logger.error(f"Failed to connect to IRC server: {e}")
+        except Exception as e:
+            self.bot.logger.error(f"Error connecting to IRC server: {e}")
+
+    async def process_messages(self):
+        while True:
+            self.reactor.process_once(timeout=0.1)
+            await asyncio.sleep(0.1)
+
+    def on_join(self, connection, event):
+        pass
+
+    def on_welcome(self, connection, event):
+        self.bot.logger.info(f"IRC connection established")
+        for channel in self.target_channels:
+            connection.join(channel)
+            self.bot.logger.info(f"Joined channel {channel}.")
+
+    def on_privmsg(self, connection, event):
+        sender = f"[IRC] {irc.client.NickMask(event.source).nick}"
+        message = event.arguments[0]
+        target = event.target[1:]
+        asyncio.run_coroutine_threadsafe(
+            self.bot.forward_irc_message_to_discord(target, sender, message),
+            self.bot.loop
+        )
+
+    def on_pubmsg(self, connection, event):
+        self.on_privmsg(connection, event)
+
+    def disconnect(self):
+        self.future.cancel()
+        self.connection.disconnect("Bot shutting down.")
 
 async def setup(bot):
     await bot.add_cog(DiscordBot(bot.config))

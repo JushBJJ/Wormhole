@@ -8,4 +8,4 @@ rich
 setuptools
 debugpy
 asyncpg
-irc3
+irc

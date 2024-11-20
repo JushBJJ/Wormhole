@@ -111,7 +111,7 @@ class EventHandlers(commands.Cog):
 
             real_messages = []
             messages = await asyncio.gather(*tasks, return_exceptions=True)
-            content = content + attachments + sticker_content + mentions
+            content = content + attachments + sticker_content
             await self.bot.redis_publish(display_name, user_hash, content, embeds, stickers_to_send, channel_category)
             for result in messages:
                 if isinstance(result, discord.Message):
@@ -123,6 +123,15 @@ class EventHandlers(commands.Cog):
             message_links = [message.jump_url for message in real_messages]
             await self.bot.config.append_link(message_hash, message_links)
             await self.handle_config_post(channel_config, message)
+
+            if channel_category == "wormhole":
+                await self.bot.redis_publish(display_name, user_hash, content, embeds, stickers_to_send, channel_category)
+
+            if self.bot.irc_client and self.bot.irc_client.connection.is_connected():
+                irc_message = f"""
+                [{display_name}] ({user_hash[:6]}): {content}\n{attachments}\n{sticker_content}
+                """.strip()
+                self.bot.irc_client.connection.privmsg("#"+channel_category, irc_message)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
