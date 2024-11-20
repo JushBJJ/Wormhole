@@ -281,10 +281,13 @@ class IRCClient(irc.client_aio.AioSimpleIRCClient):
 
     async def connect_and_start(self):
         try:
+            self.bot.logger.info(f"Connecting to IRC server: {self.bot.irc_server}")
+            ssl_factory = irc.connection.AioFactory(ssl=True)
             await self.connection.connect(
-                self.bot.irc_server,
-                self.bot.irc_port,
-                self.nickname
+                server=self.bot.irc_server,
+                port=self.bot.irc_port,
+                nickname=self.nickname,
+                connect_factory=ssl_factory
             )
         except irc.client.ServerConnectionError as e:
             self.bot.logger.error(f"Failed to connect to IRC server: {e}")
