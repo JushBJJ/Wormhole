@@ -36,6 +36,52 @@ class DiscordBot(commands.Bot):
         self.irc_client = None
         self.setup_once = False
 
+    def format_attachments(self, attachments) -> str:
+        if not attachments:
+            return ""
+        urls = [f"[Attachment: {a.url}]" for a in attachments]
+        return " ".join(urls)
+
+    def format_irc_message(self, display_name: str, user_hash: str, content: str, attachments, sticker_content: str) -> str:
+        parts = []
+        header = f"[{display_name}] ({user_hash[:6]})"
+        parts.append(header)
+
+        if content.strip():
+            parts.append(content)
+        
+        attachment_text = self.format_attachments(attachments)
+        if attachment_text:
+            parts.append(attachment_text)
+            
+        if sticker_content:
+            parts.append(sticker_content)
+
+        return ": ".join([parts[0], " ".join(parts[1:])])
+
+    def format_irc_header(self, display_name: str, user_hash: str) -> str:
+        return f"[{display_name}] ({user_hash[:6]})"
+
+    def format_attachment_message(self, header: str, attachment) -> str:
+        return f"{header}: [Attachment: {attachment.url}]"
+
+    def format_sticker_message(self, header: str, sticker_content: str) -> str:
+        return f"{header}: {sticker_content}"
+
+    def format_content_message(self, header: str, content: str) -> str:
+        return f"{header}: {content}"
+
+    async def send_irc_message_parts(self, connection, channel: str, header: str, 
+                                   content: str, attachments, sticker_content: str):
+        if content.strip():
+            connection.privmsg(f"#{channel}", self.format_content_message(header, content))
+        
+        if sticker_content:
+            connection.privmsg(f"#{channel}", self.format_sticker_message(header, sticker_content))
+
+        for attachment in attachments:
+            connection.privmsg(f"#{channel}", self.format_attachment_message(header, attachment))
+
     async def _setup_last_messages_dict(self) -> None:
         channel_categories: list[str] = await self.config.get_channel_list()
         self.last_messages = {category: set() for category in channel_categories}
@@ -263,7 +309,7 @@ class DiscordBot(commands.Bot):
                         tasks.append(webhook.send(
                             content=message,
                             username=sender,
-                            avatar_url="https://cdn.discordapp.com/attachments/1257498794069590017/1308490243607101531/28xp-pepefrog-superJumbo.png?ex=673e2200&is=673cd080&hm=744054e11717702ff67e89f482c37ff5363631ccaaa651c43b7998bf3ad75ad2&",
+                            avatar_url="https://cdn.discordapp.com/attachments/1257498794069590017/1308758643407061013/19ba1725ab283c0ea5b844163e43cefd.png?ex=673f1bf8&is=673dca78&hm=f363368cf02dd73daf2a4ea18b9bedabab06ad984ca2e0bbe51bdadeb17fd5cb&",
                             allowed_mentions=discord.AllowedMentions(everyone=False)
                         ))
                     else:

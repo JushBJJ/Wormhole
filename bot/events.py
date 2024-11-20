@@ -128,10 +128,15 @@ class EventHandlers(commands.Cog):
                 await self.bot.redis_publish(display_name, user_hash, content, embeds, stickers_to_send, channel_category)
 
             if self.bot.irc_client and self.bot.irc_client.connection.is_connected():
-                irc_message = f"""
-                [{display_name}] ({user_hash[:6]}): {content}\n{attachments}\n{sticker_content}
-                """.strip()
-                self.bot.irc_client.connection.privmsg("#"+channel_category, irc_message)
+                header = self.bot.format_irc_header(display_name, user_hash)
+                await self.bot.send_irc_message_parts(
+                    self.bot.irc_client.connection,
+                    channel_category,
+                    header,
+                    content,
+                    message.attachments,
+                    sticker_content
+                )
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
