@@ -35,6 +35,7 @@ class DiscordBot(commands.Bot):
         self.irc_nickname = os.getenv("IRC_NICKNAME")
         self.irc_client = None
         self.setup_once = False
+        self.webhooks = []
 
     def format_attachments(self, attachments) -> str:
         if not attachments:

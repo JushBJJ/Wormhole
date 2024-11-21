@@ -21,7 +21,8 @@ class EventHandlers(commands.Cog):
     async def on_message(self, message):
         if message.author == self.bot.user:
             return
-        if message.webhook_id is not None:
+
+        if message.webhook_id in self.bot.webhooks:
             return
 
         user_id = str(message.author.id)
@@ -93,8 +94,9 @@ class EventHandlers(commands.Cog):
                     if permissions.manage_webhooks:
                         webhooks = await channel.webhooks()
                         webhook = discord.utils.get(webhooks, name="WormholeWebhook")
-                        if not webhook:
-                            webhook = await channel.create_webhook(name="WormholeWebhook")
+                        webhook = webhook or await channel.create_webhook(name="WormholeWebhook")
+                        if webhook.id not in self.bot.webhooks:
+                            self.bot.webhooks.append(webhook.id)
                         content_to_send = content + attachments + sticker_content if attachments or sticker_content or mentions else content
                         tasks.append(webhook.send(
                             content=content_to_send,
