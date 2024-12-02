@@ -36,6 +36,7 @@ class DiscordBot(commands.Bot):
         self.irc_client = None
         self.setup_once = False
         self.webhooks = []
+        self.disconnected_channels = set()
 
     def format_attachments(self, attachments) -> str:
         if not attachments:

@@ -95,11 +95,17 @@ class EventHandlers(commands.Cog):
                             embeds=message.embeds if message.embeds and message.author.bot else [],
                             allowed_mentions=discord.AllowedMentions(everyone=False)
                         ))
+
+                        # check if the channel is in the disconnected channels list
+                        disconnected_channel = f"{channel.name} in {channel.guild.name}"
+                        if disconnected_channel in self.bot.disconnected_channels:
+                            self.bot.disconnected_channels.remove(disconnected_channel)
                     else:
-                        # Send message if bot can't create webhooks
                         tasks.append(channel.send(
                             f":warning: I need the 'Manage Webhooks' permission in this server to send/receive wormhole messages."
                         ))
+                        disconnected_channel = f"{channel.name} in {channel.guild.name}"
+                        self.bot.disconnected_channels.add(disconnected_channel)
 
             real_messages = []
             messages = await asyncio.gather(*tasks, return_exceptions=True)

@@ -104,6 +104,18 @@ class GeneralCommands(commands.Cog):
         embed.set_image(url=user_config.get('profile_picture', ''))
         embed.set_footer(text="Missing info means not registered yet")
         return embed
+    
+    @commands.command(name="list_servers")
+    async def list_servers(self, ctx):
+        """List servers the bot is in"""
+        servers = [f"- {guild.name}" for guild in self.bot.guilds]
+        total = len(servers)
+        disconnected_channels = [f"- {channel}" for channel in self.bot.disconnected_channels]
+        await ctx.send(
+                       f"All Servers:\n{'\n'.join(servers)}"\
+                       f"\nDisconnected Channels:\n{'\n'.join(disconnected_channels)}"\
+                       f"\n---\nTotal Servers: {total}"
+        )
 
 async def setup(bot):
     await bot.add_cog(GeneralCommands(bot))
