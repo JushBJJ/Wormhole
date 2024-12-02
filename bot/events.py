@@ -63,19 +63,9 @@ class EventHandlers(commands.Cog):
             channels = await self.bot.config.get_all_channels_in_category_by_id(channel_id)
 
             if message_reference:
-                original_message_link = message_reference.jump_url
-                hashed_original_message = await self.bot.config.get_message_hash_by_link(original_message_link)
-                if hashed_original_message:
-                    reply_message_links = await self.bot.config.get_message_links(hashed_original_message)
-                    for link in reply_message_links:
-                        try:
-                            channel_id, message_id = self.bot.config.parse_message_link(link)
-                            channel = self.bot.get_channel(int(channel_id))
-                            if channel:
-                                reply_message = await channel.fetch_message(int(message_id))
-                                reply_messages.append(reply_message)
-                        except:
-                            pass
+                reply_content = message_reference.resolved.content
+                reply_content = reply_content.replace("\n", "\n> ")
+                content = f"> {reply_content}\n{content}"
             
             # Check if own channel can manage webhooks
             permissions = message.channel.permissions_for(message.guild.me)
