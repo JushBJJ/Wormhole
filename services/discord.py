@@ -102,15 +102,6 @@ class DiscordBot(commands.Bot):
             self.redis_reconnect_task.start()
             self.logger.info("Redis reconnect task started.")
 
-            channel_list = await self.config.get_channel_list()
-            _channel_list = []
-            for channel_name in channel_list:
-                irc_channel = f'#{channel_name}'
-                _channel_list.append(irc_channel)
-            self.irc_client = IRCClient(self, irc_channel)
-            self.irc_client.target_channels = _channel_list
-            await self.irc_client.connect_and_start()
-
     @tasks.loop(seconds=30)
     async def redis_reconnect_task(self):
         try:
@@ -257,6 +248,14 @@ class DiscordBot(commands.Bot):
     async def on_ready(self):
         self.logger.info(f"Logged in as {self.user.name} (ID: {self.user.id})")
         self.logger.info(f"Connected to {len(self.guilds)} guilds")
+        channel_list = await self.config.get_channel_list()
+        _channel_list = []
+        for channel_name in channel_list:
+            irc_channel = f'#{channel_name}'
+            _channel_list.append(irc_channel)
+        self.irc_client = IRCClient(self, irc_channel)
+        self.irc_client.target_channels = _channel_list
+        await self.irc_client.connect_and_start()
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CheckFailure):
@@ -337,6 +336,7 @@ class IRCClient(irc.client_aio.AioSimpleIRCClient):
                 nickname=self.nickname,
                 connect_factory=ssl_factory
             )
+
         except irc.client.ServerConnectionError as e:
             self.bot.logger.error(f"Failed to connect to IRC server: {e}")
         except Exception as e:
